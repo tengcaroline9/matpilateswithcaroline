@@ -1255,6 +1255,53 @@
   .hero-actions { animation: fadeUp 0.7s ease 0.3s both; }
   .hero-right { animation: fadeUp 0.7s ease 0.15s both; }
 </style>
+<!-- Supabase backend bootstrap (Wave B) -->
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+const SB_URL = 'https://xeirrlaulhwcoyrfgkvx.supabase.co';
+const SB_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhlaXJybGF1bGh3Y295cmZna3Z4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODA3NDY2ODksImV4cCI6MjA5NjMyMjY4OX0.R_Dd-owvcRJwMFsUjOc0G2MmssI3qnjPuNT_BT6eW6E';
+window.sb = window.supabase.createClient(SB_URL, SB_ANON, {
+  auth: { persistSession: true, autoRefreshToken: true, storage: window.localStorage }
+});
+window.MPWC = { user:null, ent:{bundle:null,weeks:[],alacarte:[],history:[]}, completed:[], ready:false };
+
+async function mpwcLoadState() {
+  const { data: { session } } = await window.sb.auth.getSession();
+  window.MPWC.user = session ? session.user : null;
+  window.MPWC.ent = { bundle:null, weeks:[], alacarte:[], history:[] };
+  window.MPWC.completed = [];
+  if (window.MPWC.user) {
+    const uid = window.MPWC.user.id;
+    const [{ data: ents }, { data: prog }] = await Promise.all([
+      window.sb.from('mpwc_entitlements').select('kind,ref,amount_cents').eq('user_id', uid),
+      window.sb.from('mpwc_progress').select('day').eq('user_id', uid)
+    ]);
+    (ents||[]).forEach(e => {
+      if (e.kind === 'bundle') window.MPWC.ent.bundle = { ts:0, amount:(e.amount_cents||0)/100 };
+      else if (e.kind === 'week' && e.ref != null && !window.MPWC.ent.weeks.includes(e.ref)) window.MPWC.ent.weeks.push(e.ref);
+      else if (e.kind === 'day' && e.ref != null && !window.MPWC.ent.alacarte.includes(e.ref)) window.MPWC.ent.alacarte.push(e.ref);
+    });
+    window.MPWC.completed = (prog||[]).map(p => p.day);
+  }
+  window.MPWC.ready = true;
+  // reveal dashboard nav link if logged in
+  try { const link = document.getElementById('nav-dashboard'); if (link) link.style.display = window.MPWC.user ? '' : 'none'; } catch(e){}
+}
+
+// authReady resolves once the FIRST state load completes — routing waits on it.
+window.authReady = mpwcLoadState();
+
+// Keep cache fresh on auth changes (login/logout in this or another tab).
+window.sb.auth.onAuthStateChange((event) => {
+  if (event === 'SIGNED_OUT') { window.MPWC.user=null; window.MPWC.ent={bundle:null,weeks:[],alacarte:[],history:[]}; window.MPWC.completed=[]; }
+  else { mpwcLoadState(); }
+});
+
+window.mpwcIsAdmin = function() {
+  const e = window.MPWC.user && window.MPWC.user.email;
+  return e === 'andresescobedolara@gmail.com' || e === 'tengcaroline9@gmail.com';
+};
+</script>
 </head>
 <body>
 
@@ -1393,8 +1440,8 @@
         </div>
         <div class="week-body">
           <div style="display:flex;gap:0.4rem;flex-wrap:wrap;margin-bottom:0.75rem;">
-            <span class="day-tag" style="background:var(--beige);color:var(--text-muted);">$12.99/week</span>
-            <span class="day-tag" style="background:var(--beige);color:var(--text-muted);">$2.99/day</span>
+            <span class="day-tag" style="background:var(--beige);color:var(--text-muted);">$13/week</span>
+            <span class="day-tag" style="background:var(--beige);color:var(--text-muted);">$3/day</span>
           </div>
           <p class="week-desc" style="margin-bottom:1rem;">Tap any day to view the workout — exercises are blurred until unlocked.</p>
           <div style="display:flex;flex-wrap:wrap;gap:0.4rem;">
@@ -1418,8 +1465,8 @@
         </div>
         <div class="week-body">
           <div style="display:flex;gap:0.4rem;flex-wrap:wrap;margin-bottom:0.75rem;">
-            <span class="day-tag" style="background:var(--beige);color:var(--text-muted);">$12.99/week</span>
-            <span class="day-tag" style="background:var(--beige);color:var(--text-muted);">$2.99/day</span>
+            <span class="day-tag" style="background:var(--beige);color:var(--text-muted);">$13/week</span>
+            <span class="day-tag" style="background:var(--beige);color:var(--text-muted);">$3/day</span>
           </div>
           <p class="week-desc" style="margin-bottom:1rem;">Tap any day to view the workout — exercises are blurred until unlocked.</p>
           <div style="display:flex;flex-wrap:wrap;gap:0.4rem;">
@@ -1443,8 +1490,8 @@
         </div>
         <div class="week-body">
           <div style="display:flex;gap:0.4rem;flex-wrap:wrap;margin-bottom:0.75rem;">
-            <span class="day-tag" style="background:var(--beige);color:var(--text-muted);">$12.99/week</span>
-            <span class="day-tag" style="background:var(--beige);color:var(--text-muted);">$2.99/day</span>
+            <span class="day-tag" style="background:var(--beige);color:var(--text-muted);">$13/week</span>
+            <span class="day-tag" style="background:var(--beige);color:var(--text-muted);">$3/day</span>
           </div>
           <p class="week-desc" style="margin-bottom:1rem;">Tap any day to view the workout — exercises are blurred until unlocked.</p>
           <div style="display:flex;flex-wrap:wrap;gap:0.4rem;">
@@ -1627,7 +1674,7 @@
     <!-- Per workout -->
     <div class="pricing-card">
       <div class="pricing-tier">À La Carte</div>
-      <div class="pricing-price">$2.99</div>
+      <div class="pricing-price">$3</div>
       <div class="pricing-period">per individual workout</div>
       <ul class="pricing-features">
         <li>Any single workout from Weeks 2–4</li>
@@ -1641,7 +1688,7 @@
     <!-- Per week -->
     <div class="pricing-card">
       <div class="pricing-tier">Weekly Access</div>
-      <div class="pricing-price">$12.99</div>
+      <div class="pricing-price">$13</div>
       <div class="pricing-period">per week (Weeks 2, 3, or 4)</div>
       <ul class="pricing-features">
         <li>Full access to any one week</li>
@@ -1655,7 +1702,7 @@
     <!-- Full bundle -->
     <div class="pricing-card featured">
       <div class="pricing-tier">Best Value</div>
-      <div class="pricing-price">$29.99</div>
+      <div class="pricing-price">$30</div>
       <div class="pricing-period">full program · Weeks 2–4</div>
       <ul class="pricing-features">
         <li>All 21 remaining workouts</li>
@@ -1759,7 +1806,7 @@
 
     <!-- Day selector (shown only for à la carte) -->
     <div id="day-selector" style="display:none; margin-bottom:1.5rem;">
-      <label style="font-size:0.75rem; letter-spacing:0.1em; text-transform:uppercase; color:var(--text-muted); display:block; margin-bottom:0.6rem;">Select Workout Days <span style="text-transform:none; letter-spacing:0; color:var(--text-muted); font-size:0.72rem;">— pick as many as you want, $2.99 each</span></label>
+      <label style="font-size:0.75rem; letter-spacing:0.1em; text-transform:uppercase; color:var(--text-muted); display:block; margin-bottom:0.6rem;">Select Workout Days <span style="text-transform:none; letter-spacing:0; color:var(--text-muted); font-size:0.72rem;">— pick as many as you want, $3 each</span></label>
       <div style="display:flex; flex-wrap:wrap; gap:0.5rem;" id="day-buttons"></div>
       <div id="day-selected-count" style="margin-top:0.65rem; font-size:0.72rem; color:var(--text-muted); display:flex; align-items:center; justify-content:space-between;">
         <span><span id="day-count-num" style="color:var(--navy); font-weight:500;">0</span> selected</span>
@@ -1807,21 +1854,35 @@
 
     <!-- Info note -->
     <p style="font-size:0.75rem; color:var(--text-muted); line-height:1.7; text-align:center;">
-      After clicking, you'll be redirected to complete your payment.<br>Access is sent to your email within 24 hours. Questions? <a href="mailto:hello@matpilateswithcaroline.com" style="color:var(--navy-mid);">Contact Caroline</a>.
+      After clicking, complete your payment in Venmo.<br>We unlock your access once we confirm the transfer — usually within a few hours. Questions? <a href="mailto:hello@matpilateswithcaroline.com" style="color:var(--navy-mid);">Contact Caroline</a>.
     </p>
 
   </div>
 </div>
 
+<!-- Payment confirmation (separate overlay so the form is never destroyed) -->
+<div id="payment-confirm" style="display:none; position:fixed; inset:0; z-index:700; background:rgba(27,46,74,0.45); align-items:center; justify-content:center; padding:1.5rem;">
+  <div style="background:var(--white); border-radius:8px; max-width:480px; width:100%; padding:3rem 2.5rem; text-align:center; box-shadow:0 24px 64px rgba(27,46,74,0.18);">
+    <div style="font-size:2.5rem; margin-bottom:1rem;">✓</div>
+    <div style="font-family:'Cormorant Garamond',serif; font-size:1.75rem; font-weight:300; color:var(--navy); margin-bottom:0.75rem;">Payment Initiated</div>
+    <p id="pc-msg" style="font-size:0.88rem; color:var(--text-mid); line-height:1.8; margin-bottom:1.75rem;"></p>
+    <div style="display:flex; gap:0.75rem; justify-content:center;">
+      <button onclick="closePaymentConfirm()" style="padding:0.85rem 1.75rem; background:var(--cream); color:var(--navy); border:1px solid var(--beige-mid); border-radius:2px; cursor:pointer; font-family:'Jost',sans-serif; font-size:0.75rem; font-weight:500; letter-spacing:0.12em; text-transform:uppercase;">Done</button>
+      <button onclick="closePaymentConfirm();openMemberDashboard();" style="padding:0.85rem 1.75rem; background:var(--navy); color:var(--cream); border:none; border-radius:2px; cursor:pointer; font-family:'Jost',sans-serif; font-size:0.75rem; font-weight:500; letter-spacing:0.12em; text-transform:uppercase;">View Dashboard →</button>
+    </div>
+  </div>
+</div>
+
 <script>
+  function closePaymentConfirm(){ document.getElementById('payment-confirm').style.display='none'; document.body.style.overflow=''; }
   // ---- Payment modal logic ----
   const PAYPAL_USERNAME = '@MatPilatesCaroline'; // ← replace with your PayPal.me link
   const VENMO_USERNAME  = '@carolineteng';
 
   const plans = {
-    alacarte: { eyebrow: 'À La Carte', title: 'Individual Workout', price: 2.99, label: '1 Workout — $2.99' },
-    weekly:   { eyebrow: 'Weekly Access', title: 'One Full Week', price: 12.99, label: 'Weekly Access — $12.99' },
-    bundle:   { eyebrow: 'Best Value', title: 'Full Program (Weeks 2–4)', price: 29.99, label: 'Full Program Bundle — $29.99' },
+    alacarte: { eyebrow: 'À La Carte', title: 'Individual Workout', price: 3, label: '1 Workout — $3' },
+    weekly:   { eyebrow: 'Weekly Access', title: 'One Full Week', price: 13, label: 'Weekly Access — $13' },
+    bundle:   { eyebrow: 'Best Value', title: 'Full Program (Weeks 2–4)', price: 30, label: 'Full Program Bundle — $30' },
   };
 
   let currentPlan = null;
@@ -1841,10 +1902,10 @@
     const label = n === 0
       ? 'No workouts selected'
       : n === 1
-        ? 'Day ' + sorted[0] + ' Workout — $2.99'
-        : n + ' Workouts (Day ' + sorted.join(', ') + ') — $' + (2.99).toFixed(2) + ' each';
+        ? 'Day ' + sorted[0] + ' Workout — $' + plans.alacarte.price
+        : n + ' Workouts (Day ' + sorted.join(', ') + ') — $' + plans.alacarte.price + ' each';
     document.getElementById('summary-item').textContent = label;
-    document.getElementById('summary-price').textContent = '$' + total.toFixed(2);
+    document.getElementById('summary-price').textContent = '$' + total;
   }
 
   function clearSelectedDays() {
@@ -1865,15 +1926,26 @@
     const p = plans[plan];
     document.getElementById('modal-eyebrow').textContent = p.eyebrow;
     document.getElementById('modal-title').textContent   = p.title;
-    document.getElementById('modal-price').textContent   = plan === 'alacarte' ? '$2.99 per workout' : plan === 'weekly' ? '$12.99 per week' : '$29.99 — full Weeks 2–4';
+    document.getElementById('modal-price').textContent   = plan === 'alacarte' ? '$3 per workout' : plan === 'weekly' ? '$13 per week' : '$30 — full Weeks 2–4';
     document.getElementById('summary-item').textContent  = p.label;
-    document.getElementById('summary-price').textContent = '$' + p.price.toFixed(2);
+    document.getElementById('summary-price').textContent = '$' + p.price;
 
     document.getElementById('week-selector').style.display = plan === 'weekly'   ? 'block' : 'none';
     document.getElementById('day-selector').style.display  = plan === 'alacarte' ? 'block' : 'none';
 
     if (plan === 'alacarte') buildDayButtons();
     document.querySelectorAll('.week-btn').forEach(b => { b.style.background = 'var(--cream)'; b.style.borderColor = 'var(--beige)'; b.style.color = 'var(--text-mid)'; });
+
+    // Prefill buyer details from the signed-in account (email is the account's).
+    try {
+      const u = window.MPWC && window.MPWC.user;
+      if (u) {
+        const prof = (typeof getMemberProfile === 'function') ? getMemberProfile() : {};
+        const nameEl = document.getElementById('buyer-name'), emailEl = document.getElementById('buyer-email');
+        if (nameEl && !nameEl.value) nameEl.value = [prof.firstName, prof.lastName].filter(Boolean).join(' ');
+        if (emailEl) { emailEl.value = u.email || ''; emailEl.readOnly = true; }
+      }
+    } catch (e) {}
 
     const modal = document.getElementById('payment-modal');
     modal.style.display = 'flex';
@@ -1923,28 +1995,47 @@
     document.querySelectorAll('.week-btn').forEach(b => { b.style.background='var(--cream)'; b.style.borderColor='var(--beige)'; b.style.color='var(--text-mid)'; });
     btn.style.background = 'var(--navy)'; btn.style.borderColor = 'var(--navy)'; btn.style.color = '#F8F4ED';
     selectedWeek = label.replace(/&amp;/g,'&');
-    document.getElementById('summary-item').textContent = selectedWeek + ' — $12.99';
+    document.getElementById('summary-item').textContent = selectedWeek + ' — $13';
   }
 
-  function payWith(method) {
-    const name  = document.getElementById('buyer-name').value.trim();
-    const email = document.getElementById('buyer-email').value.trim();
-    if (!name || !email) { alert('Please enter your name and email so we can send your access link.'); return; }
-
-    const p = plans[currentPlan];
-    let note = 'MatPilates - ' + p.eyebrow;
-    if (currentPlan === 'weekly'   && selectedWeek) note += ' - ' + selectedWeek;
-    if (currentPlan === 'alacarte' && selectedDays.length) {
-      const sorted = selectedDays.slice().sort((a,b)=>a-b);
-      note += ' - Days ' + sorted.join(', ');
+  async function payWith(method) {
+    // Must be signed in so the selection can be recorded against the account.
+    const user = window.MPWC && window.MPWC.user;
+    if (!user) {
+      alert('Please create your free account (or sign in) first, then choose your plan — that way we can link your payment to your access.');
+      closePayment(); openMemberLogin();
+      return;
     }
+    const name  = (document.getElementById('buyer-name').value || '').trim() || (getMemberProfile().firstName || '');
+    const email = user.email;
+
+    // Validate the selection BEFORE recording anything.
     if (currentPlan === 'alacarte' && selectedDays.length === 0) { alert('Please select at least one workout day.'); return; }
     if (currentPlan === 'weekly'   && !selectedWeek){ alert('Please select a week first.'); return; }
+
+    const p = plans[currentPlan];
+    // Normalized selection for the backend claim.
+    const days = currentPlan === 'alacarte' ? selectedDays.slice().sort((a,b)=>a-b) : null;
+    const week = currentPlan === 'weekly' ? parseInt((String(selectedWeek).match(/\d+/) || [])[0], 10) : null;
+
+    let note = 'MatPilates - ' + p.eyebrow;
+    if (currentPlan === 'weekly'   && selectedWeek) note += ' - ' + selectedWeek;
+    if (currentPlan === 'alacarte' && days) note += ' - Days ' + days.join(', ');
     note += ' (' + email + ')';
 
     const amount = currentPlan === 'alacarte'
       ? (selectedDays.length * p.price).toFixed(2)
       : p.price.toFixed(2);
+
+    // RECORD the client's selection in the backend (status: pending) BEFORE
+    // sending them to Venmo, so the admin sees exactly what to grant.
+    try {
+      const { error } = await window.sb.from('mpwc_payment_claims').insert({
+        user_id: user.id, plan: currentPlan, week: week, days: days,
+        amount_cents: Math.round(parseFloat(amount) * 100), method: method, note: note, status: 'pending'
+      });
+      if (error) console.warn('[mpwc] could not record payment claim:', error.message);
+    } catch (e) { console.warn('[mpwc] claim insert failed:', e); }
 
     if (method === 'paypal') {
       const url = 'https://www.paypal.com/paypalme/' + PAYPAL_USERNAME.replace('@','') + '/' + amount + 'USD';
@@ -1956,29 +2047,17 @@
       window.open(url, '_blank');
     }
 
-    // Show confirmation message
-    document.getElementById('payment-modal').innerHTML = `
-      <div style="background:var(--white); border-radius:8px; max-width:480px; width:100%; padding:3rem 2.5rem; text-align:center; box-shadow:0 24px 64px rgba(27,46,74,0.18);">
-        <div style="font-size:2.5rem; margin-bottom:1rem;">✓</div>
-        <div style="font-family:'Cormorant Garamond',serif; font-size:1.75rem; font-weight:300; color:var(--navy); margin-bottom:0.75rem;">Payment Initiated</div>
-        <p style="font-size:0.88rem; color:var(--text-mid); line-height:1.8; margin-bottom:1.75rem;">Thank you, ${name}! Complete your payment in the ${method === 'paypal' ? 'PayPal' : 'Venmo'} window that just opened.<br><br>Once confirmed, your access link will be sent to <strong>${email}</strong> within 24 hours.</p>
-        <div style="display:flex; gap:0.75rem; justify-content:center;">
-          <button onclick="closePayment()" style="padding:0.85rem 1.75rem; background:var(--cream); color:var(--navy); border:1px solid var(--beige-mid); border-radius:2px; cursor:pointer; font-family:'Jost',sans-serif; font-size:0.75rem; font-weight:500; letter-spacing:0.12em; text-transform:uppercase;">Done</button>
-          <button onclick="closePayment();openMemberDashboard();" style="padding:0.85rem 1.75rem; background:var(--navy); color:var(--cream); border:none; border-radius:2px; cursor:pointer; font-family:'Jost',sans-serif; font-size:0.75rem; font-weight:500; letter-spacing:0.12em; text-transform:uppercase;">View Dashboard →</button>
-        </div>
-      </div>`;
-    document.getElementById('payment-modal').style.display = 'flex';
-
-    // Persist purchase to the member's local record (prototype convenience —
-    // real implementation would write this from a PayPal/Venmo webhook).
-    try {
-      if (typeof recordPurchase === 'function') {
-        recordPurchase(currentPlan, {
-          name: name, email: email, amount: parseFloat(amount), method: method,
-          days: selectedDays.slice(), week: selectedWeek, ts: Date.now()
-        });
-      }
-    } catch (e) {}
+    // Show confirmation in a SEPARATE overlay so the payment form stays intact
+    // (a member can buy again later without reloading). Access is granted
+    // manually by an admin after the Venmo payment clears.
+    closePayment();
+    document.getElementById('pc-msg').innerHTML =
+      'Thanks' + (name ? ', ' + name : '') + '! Complete your payment in the ' +
+      (method === 'paypal' ? 'PayPal' : 'Venmo') + ' window that just opened.<br><br>' +
+      "Once we confirm your payment we'll unlock your content (usually within a few hours). " +
+      'You\'ll see it the next time you sign in to <strong>' + email + '</strong>.';
+    document.getElementById('payment-confirm').style.display = 'flex';
+    document.body.style.overflow = 'hidden';
   }
 
   // Close on backdrop click
@@ -2421,6 +2500,7 @@
       <div style="display:flex; align-items:center; gap:1rem;">
         <button onclick="closeMemberDashboard();openMemberLibrary();" style="background:transparent; border:1px solid rgba(168,189,214,0.3); border-radius:2px; padding:0.4rem 0.75rem; color:var(--blue-light); font-family:'Jost',sans-serif; font-size:0.65rem; letter-spacing:0.12em; text-transform:uppercase; cursor:pointer; transition:all 0.2s;" onmouseover="this.style.background='rgba(168,189,214,0.12)';this.style.color='var(--cream)';" onmouseout="this.style.background='transparent';this.style.color='var(--blue-light)';">Library</button>
         <span id="md-member-email" style="font-size:0.72rem; color:rgba(248,244,237,0.7);"></span>
+        <button id="md-admin-btn" onclick="openAdminPanel()" title="Admin panel" style="display:none; background:transparent; border:1px solid rgba(168,189,214,0.3); border-radius:2px; padding:0.4rem 0.75rem; color:var(--blue-light); font-family:'Jost',sans-serif; font-size:0.65rem; letter-spacing:0.12em; text-transform:uppercase; cursor:pointer; transition:all 0.2s;" onmouseover="this.style.background='rgba(168,189,214,0.12)';this.style.color='var(--cream)';" onmouseout="this.style.background='transparent';this.style.color='var(--blue-light)';">Admin</button>
         <button onclick="signOutMember()" title="Sign out of this device" style="background:transparent; border:1px solid rgba(168,189,214,0.3); border-radius:2px; padding:0.4rem 0.75rem; color:var(--blue-light); font-family:'Jost',sans-serif; font-size:0.65rem; letter-spacing:0.12em; text-transform:uppercase; cursor:pointer; transition:all 0.2s;" onmouseover="this.style.background='rgba(168,189,214,0.12)';this.style.color='var(--cream)';" onmouseout="this.style.background='transparent';this.style.color='var(--blue-light)';">Sign out</button>
         <button onclick="closeMemberDashboard()" style="background:transparent; border:1px solid rgba(168,189,214,0.3); border-radius:2px; padding:0.4rem 0.75rem; color:var(--blue-light); font-family:'Jost',sans-serif; font-size:0.65rem; letter-spacing:0.12em; text-transform:uppercase; cursor:pointer; transition:all 0.2s;" onmouseover="this.style.background='rgba(168,189,214,0.12)';this.style.color='var(--cream)';" onmouseout="this.style.background='transparent';this.style.color='var(--blue-light)';">← Exit</button>
       </div>
@@ -2500,6 +2580,27 @@
         <button onclick="closeMemberDashboard();document.getElementById('pricing').scrollIntoView({behavior:'smooth'});" style="background:none; color:var(--navy); border:1px solid var(--navy); border-radius:3px; padding:0.6rem 1.1rem; font-family:'Jost',sans-serif; font-size:0.68rem; font-weight:500; letter-spacing:0.14em; text-transform:uppercase; cursor:pointer; transition:all 0.2s;" onmouseover="this.style.background='var(--navy)';this.style.color='var(--cream)';" onmouseout="this.style.background='none';this.style.color='var(--navy)';">View plans</button>
       </div>
     </div>
+  </div>
+</div>
+
+<!-- ============================================================
+     ADMIN PANEL — entitlement + revenue overview (admins only, #/admin)
+     ============================================================ -->
+<div id="mpwc-admin" data-screen-label="Admin Panel" style="display:none; position:fixed; inset:0; z-index:680; background:var(--off-white); overflow-y:auto;">
+  <div style="background:var(--navy); padding:1.1rem 2rem; display:flex; align-items:center; justify-content:space-between; position:sticky; top:0; z-index:2;">
+    <div style="display:flex; align-items:baseline; gap:0.9rem;">
+      <span style="font-family:'Cormorant Garamond',serif; font-size:1.4rem; font-weight:300; color:var(--cream);">Admin</span>
+      <span style="font-size:0.68rem; letter-spacing:0.14em; text-transform:uppercase; color:var(--blue-light);">Members &amp; access</span>
+    </div>
+    <div style="display:flex; gap:0.6rem;">
+      <button onclick="openAdminPanel()" title="Refresh" style="background:transparent; border:1px solid rgba(168,189,214,0.3); border-radius:2px; padding:0.4rem 0.75rem; color:var(--blue-light); font-family:'Jost',sans-serif; font-size:0.65rem; letter-spacing:0.12em; text-transform:uppercase; cursor:pointer;">Refresh</button>
+      <button onclick="closeAdminPanel()" style="background:transparent; border:1px solid rgba(168,189,214,0.3); border-radius:2px; padding:0.4rem 0.75rem; color:var(--blue-light); font-family:'Jost',sans-serif; font-size:0.65rem; letter-spacing:0.12em; text-transform:uppercase; cursor:pointer;">← Exit</button>
+    </div>
+  </div>
+  <div style="padding:1.75rem 2rem; max-width:1100px; margin:0 auto;">
+    <div id="admin-summary" style="display:flex; gap:1rem; flex-wrap:wrap; margin-bottom:1.5rem;"></div>
+    <div id="admin-claims" style="margin-bottom:2rem;"></div>
+    <div id="admin-body" style="background:var(--white); border:1px solid var(--beige); border-radius:6px; overflow-x:auto;"></div>
   </div>
 </div>
 
@@ -2612,7 +2713,7 @@
       </div>
       <div style="display:flex; gap:0.6rem; flex-shrink:0; align-items:flex-start; padding-top:0.2rem;">
         <button id="wm-week-pdf-btn" onclick="printFullWeek()" title="Download full Week 1 PDF" style="display:none; background:rgba(168,189,214,0.22); border:1px solid rgba(168,189,214,0.45); border-radius:3px; padding:0.45rem 0.85rem; font-family:'Jost',sans-serif; font-size:0.7rem; font-weight:500; letter-spacing:0.1em; text-transform:uppercase; color:var(--blue-light); cursor:pointer; transition:background 0.2s;" onmouseover="this.style.background='rgba(168,189,214,0.38)';" onmouseout="this.style.background='rgba(168,189,214,0.22)';">📄 Full Week PDF</button>
-        <button onclick="printWorkout()" title="Save this day as PDF" style="background:rgba(168,189,214,0.15); border:1px solid rgba(168,189,214,0.3); border-radius:3px; padding:0.45rem 0.85rem; font-family:'Jost',sans-serif; font-size:0.7rem; font-weight:500; letter-spacing:0.1em; text-transform:uppercase; color:var(--blue-light); cursor:pointer; transition:background 0.2s;" onmouseover="this.style.background='rgba(168,189,214,0.28)';" onmouseout="this.style.background='rgba(168,189,214,0.15)';">⬇ Save PDF</button>
+        <button id="wm-pdf-btn" onclick="printWorkout()" title="Save this day as PDF" style="background:rgba(168,189,214,0.15); border:1px solid rgba(168,189,214,0.3); border-radius:3px; padding:0.45rem 0.85rem; font-family:'Jost',sans-serif; font-size:0.7rem; font-weight:500; letter-spacing:0.1em; text-transform:uppercase; color:var(--blue-light); cursor:pointer; transition:background 0.2s;" onmouseover="this.style.background='rgba(168,189,214,0.28)';" onmouseout="this.style.background='rgba(168,189,214,0.15)';">⬇ Save PDF</button>
         <button id="wm-complete-btn" onclick="markComplete()" style="background:rgba(123,196,149,0.18); border:1px solid rgba(123,196,149,0.4); border-radius:3px; padding:0.45rem 0.95rem; font-family:'Jost',sans-serif; font-size:0.7rem; font-weight:500; letter-spacing:0.12em; text-transform:uppercase; color:#A6E0B8; cursor:pointer; transition:all 0.2s; display:inline-flex; align-items:center; gap:0.4rem;" onmouseover="this.style.background='rgba(123,196,149,0.32)';" onmouseout="this.style.background='rgba(123,196,149,0.18)';">✓ Mark complete</button>
       </div>
     </div>
@@ -3609,10 +3710,10 @@ let _gatePendingDay = null;
 let _gatePendingPreview = false;
 
 function hasAccount() {
-  try { return !!localStorage.getItem(MEMBER_KEY); } catch (e) { return false; }
+  return !!(window.MPWC && window.MPWC.user);
 }
 function isSignedIn() {
-  try { return sessionStorage.getItem('mpwc_session') === '1'; } catch (e) { return false; }
+  return !!(window.MPWC && window.MPWC.user);
 }
 // A "member" for gating purposes = has an account AND has an active session.
 // Closing the tab / restarting the page drops the session, so users have to
@@ -3621,13 +3722,9 @@ function isMember() {
   return hasAccount() && isSignedIn();
 }
 function getMemberEmail() {
-  try { return localStorage.getItem(MEMBER_KEY) || ''; } catch (e) { return ''; }
+  return (window.MPWC && window.MPWC.user && window.MPWC.user.email) || '';
 }
-function setMember(email) {
-  try { localStorage.setItem(MEMBER_KEY, email); } catch (e) {}
-  const link = document.getElementById('nav-dashboard');
-  if (link) link.style.display = '';
-}
+function setMember(email){ const link=document.getElementById('nav-dashboard'); if(link) link.style.display=''; }
 
 function showMemberGate(day, preview) {
   _gatePendingDay = day;
@@ -3655,14 +3752,6 @@ function togglePasswordVisibility() {
   const toggle = document.getElementById('gate-pw-toggle');
   if (input.type === 'password') { input.type = 'text';     toggle.textContent = 'Hide'; }
   else                           { input.type = 'password'; toggle.textContent = 'Show'; }
-}
-
-// Tiny non-cryptographic hash — DJB2. Good enough to avoid storing a raw
-// password string in localStorage for this prototype; do NOT use for real auth.
-function simpleHash(s) {
-  let h = 5381;
-  for (let i = 0; i < s.length; i++) h = ((h << 5) + h) + s.charCodeAt(i);
-  return 'h_' + (h >>> 0).toString(36);
 }
 
 // 0=too short, 1=weak, 2=okay, 3=strong, 4=excellent
@@ -3768,17 +3857,7 @@ async function submitMemberGate() {
   }
 
   btn.disabled = true; btn.textContent = 'Creating account…';
-  showGateMsg('info', 'Verifying your membership…');
-
-  // Persist full profile for the member portal (greeting, prefill, etc.)
-  // NOTE: real production would hash + salt the password server-side. This
-  // is a prototype — the value never leaves the browser; it's only used to
-  // gate the "Sign in" shortcut on this device.
-  try {
-    localStorage.setItem('mpwc_member_profile', JSON.stringify({
-      firstName: first, lastName: last, email: email, dob: dob, pwHash: simpleHash(pw)
-    }));
-  } catch (e) {}
+  showGateMsg('info', 'Creating your account…');
 
   // Fire ConvertKit signup in the background (best-effort).
   try {
@@ -3794,26 +3873,26 @@ async function submitMemberGate() {
     }
   } catch (e) {}
 
-  // Persist member, then open the originally-requested workout.
-  setMember(email);
-  try { sessionStorage.setItem('mpwc_session', '1'); } catch (e) {}
-  setTimeout(() => {
-    btn.disabled = false; btn.textContent = 'Create Account & Unlock';
-    // Capture pending BEFORE closeMemberGate() clears _gatePendingDay
-    const d = _gatePendingDay, p = _gatePendingPreview;
-    const after = _afterAuthAction;
-    _afterAuthAction = null;
-    closeMemberGate();
-    if (after === 'coaching') { showCoachingPortal(); return; }
-    // For free Week 1 days, drop the new member into their private library
-    // first — they see the whole 7-day program and can continue to the day
-    // they clicked. Locked weeks (8+) jump straight to the preview.
-    if (d != null && d <= 7) {
-      openMemberLibrary(d, p);
-    } else if (d != null) {
-      openWorkout(d, p);
+  try {
+    const { error } = await window.sb.auth.signUp({
+      email, password: pw,
+      options: { data: { firstName: first, lastName: last, dob: dob } }
+    });
+    if (error) {
+      btn.disabled=false; btn.textContent='Create Account & Unlock';
+      if (/already registered|already exists/i.test(error.message)) { showGateMsg('error','That email already has an account. Try signing in.'); }
+      else { showGateMsg('error', error.message || 'Could not create account.'); }
+      return;
     }
-  }, 450);
+    await window.authReady; await mpwcLoadState();   // ensure session+state loaded (email-confirm is OFF)
+    setMember(email);
+    const d=_gatePendingDay, p=_gatePendingPreview, after=_afterAuthAction; _afterAuthAction=null;
+    btn.disabled=false; btn.textContent='Create Account & Unlock';
+    closeMemberGate();
+    if (after==='coaching'){ showCoachingPortal(); return; }
+    if (d!=null && d<=7) openMemberLibrary(d,p); else if (d!=null) openWorkout(d,p);
+    else openMemberDashboard();
+  } catch(e){ btn.disabled=false; btn.textContent='Create Account & Unlock'; showGateMsg('error','Network error. Try again.'); }
 }
 
 // Swap the signup gate for the login page — preserves the pending day/portal
@@ -3824,32 +3903,8 @@ function switchToLogin() {
   openMemberLogin();
 }
 
-// "Already a member" shortcut — verify email + password against stored profile
-function signInMember() {
-  const profile = getMemberProfile();
-  const existing = profile.email || getMemberEmail();
-  const email = prompt('Enter your member email:', existing || '');
-  if (!email) return;
-  const clean = email.trim().toLowerCase();
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(clean)) {
-    showGateMsg('error', 'That email doesn\'t look right. Try again.');
-    return;
-  }
-  // If we have a stored password hash for this email on this device, verify
-  if (profile && profile.email === clean && profile.pwHash) {
-    const pw = prompt('Enter your password:');
-    if (!pw) return;
-    if (simpleHash(pw) !== profile.pwHash) {
-      showGateMsg('error', 'Incorrect password. Try again or sign up.');
-      return;
-    }
-  }
-  setMember(clean);
-  // Capture pending BEFORE closeMemberGate() clears _gatePendingDay
-  const d = _gatePendingDay, p = _gatePendingPreview;
-  closeMemberGate();
-  if (d != null) openWorkout(d, p);
-}
+// "Already a member" shortcut — open the login page
+function signInMember(){ document.getElementById('member-gate').style.display='none'; openMemberLogin(); }
 
 // Close gate when clicking the backdrop or pressing Esc
 document.addEventListener('DOMContentLoaded', function() {
@@ -3955,39 +4010,14 @@ function continueToPendingDay() {
 const PURCHASES_KEY = 'mpwc_purchases';
 
 function getPurchases() {
-  try {
-    const raw = localStorage.getItem(PURCHASES_KEY);
-    if (!raw) return { bundle: null, weeks: [], alacarte: [], history: [] };
-    return JSON.parse(raw);
-  } catch (e) { return { bundle: null, weeks: [], alacarte: [], history: [] }; }
+  return window.MPWC ? window.MPWC.ent : { bundle: null, weeks: [], alacarte: [], history: [] };
 }
-function savePurchases(obj) {
-  try { localStorage.setItem(PURCHASES_KEY, JSON.stringify(obj)); } catch (e) {}
-}
-function recordPurchase(plan, meta) {
-  const p = getPurchases();
-  p.history.push({ plan: plan, ts: meta.ts, amount: meta.amount, method: meta.method, email: meta.email });
-  if (plan === 'bundle') {
-    p.bundle = { ts: meta.ts, amount: meta.amount };
-  } else if (plan === 'weekly' && meta.week) {
-    // meta.week is like "Week 2 — Build & Strengthen". Extract the digit.
-    const m = String(meta.week).match(/\d+/);
-    if (m) {
-      const wn = parseInt(m[0], 10);
-      if (!p.weeks.includes(wn)) p.weeks.push(wn);
-    }
-  } else if (plan === 'alacarte' && Array.isArray(meta.days)) {
-    meta.days.forEach(d => { if (!p.alacarte.includes(d)) p.alacarte.push(d); });
-  }
-  savePurchases(p);
-}
+function savePurchases(){}
+// Access is granted manually by an admin after Venmo/PayPal payment clears.
+function recordPurchase(){}
 
 // Is a given day number unlocked for the member? (Free Week 1 + bundle/week/alacarte)
-// Owner override: ALL 30 days unlocked for editing/preview. Remove `return true`
-// to re-enable real purchase gating.
 function isDayUnlocked(day) {
-  return true;
-  // eslint-disable-next-line no-unreachable
   if (day >= 1 && day <= 7) return true;
   const p = getPurchases();
   if (p.bundle) return true;
@@ -4019,14 +4049,193 @@ function nextIncompleteDay() {
   return null; // all done
 }
 
-function getMemberProfile() {
-  try { return JSON.parse(localStorage.getItem('mpwc_member_profile')) || {}; } catch (e) { return {}; }
+function getMemberProfile(){ const u=window.MPWC&&window.MPWC.user; if(!u) return {}; const m=u.user_metadata||{}; return {firstName:m.firstName||'', lastName:m.lastName||'', email:u.email||'', dob:m.dob||''}; }
+
+async function signOutMember(){ try{ await window.sb.auth.signOut(); }catch(e){} window.MPWC.user=null; window.MPWC.ent={bundle:null,weeks:[],alacarte:[],history:[]}; window.MPWC.completed=[]; closeMemberDashboard(); openMemberLogin(); }
+
+// ─────────────────────────────────────────────────────────────────
+//  ADMIN PANEL — manual entitlement management (admins only)
+// ─────────────────────────────────────────────────────────────────
+function closeAdminPanel(){
+  document.getElementById('mpwc-admin').style.display = 'none';
+  document.body.style.overflow = '';
+  try { history.replaceState({}, '', window.location.pathname + window.location.search); } catch (e) {}
 }
 
-function signOutMember() {
-  try { sessionStorage.removeItem('mpwc_session'); } catch (e) {}
-  closeMemberDashboard();
-  openMemberLogin();
+function _adminEsc(s){ return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+function _adminFmtEnt(row){
+  const parts = [];
+  if (row.bundle_count || row.has_bundle) parts.push('Bundle');
+  // The view exposes an aggregated entitlements summary; fall back gracefully.
+  if (row.entitlements) return _adminEsc(row.entitlements);
+  return parts.length ? parts.join(', ') : '—';
+}
+
+async function openAdminPanel(){
+  if (!window.MPWC.user){ openMemberLogin(); return; }
+  if (!window.mpwcIsAdmin()){ alert('Admins only.'); return; }
+
+  const overlay = document.getElementById('mpwc-admin');
+  overlay.style.display = 'block';
+  overlay.scrollTop = 0;
+  document.body.style.overflow = 'hidden';
+  try { history.replaceState({}, '', '#/admin'); } catch (e) {}
+
+  const body = document.getElementById('admin-body');
+  body.innerHTML = '<div style="padding:2rem; color:var(--text-muted); font-size:0.85rem;">Loading members…</div>';
+
+  const { data, error } = await window.sb.from('mpwc_admin_overview').select('*').order('created_at', { ascending: false });
+  if (error){
+    body.innerHTML = '<div style="padding:2rem; color:#c0392b; font-size:0.85rem;">Could not load: ' + _adminEsc(error.message) + '</div>';
+    return;
+  }
+  const rows = data || [];
+
+  // Summary cards
+  const totalRevenue = rows.reduce((s, r) => s + (r.revenue_cents || 0), 0) / 100;
+  const summary = document.getElementById('admin-summary');
+  const cards = [
+    ['Members', rows.length],
+    ['Revenue', '$' + totalRevenue.toFixed(2)],
+    ['Days completed', rows.reduce((s, r) => s + (r.days_completed || 0), 0)]
+  ];
+  summary.innerHTML = cards.map(([l, v]) => `
+    <div style="flex:1; min-width:140px; background:var(--white); border:1px solid var(--beige); border-radius:6px; padding:1rem 1.25rem;">
+      <div style="font-family:'Cormorant Garamond',serif; font-size:1.8rem; font-weight:300; color:var(--navy); line-height:1;">${_adminEsc(v)}</div>
+      <div style="font-size:0.66rem; letter-spacing:0.12em; text-transform:uppercase; color:var(--text-muted); margin-top:0.35rem;">${_adminEsc(l)}</div>
+    </div>`).join('');
+
+  // ── Pending payment requests (what each client selected at pay-click) ──
+  const emailById = {}; rows.forEach(r => { emailById[r.id] = r.email; });
+  const claimsBox = document.getElementById('admin-claims');
+  const { data: claims } = await window.sb.from('mpwc_payment_claims')
+    .select('*').eq('status', 'pending').order('created_at', { ascending: false });
+  if (claims && claims.length) {
+    const cth = 'padding:0.6rem 0.85rem; font-size:0.6rem; letter-spacing:0.12em; text-transform:uppercase; color:var(--text-muted); text-align:left; border-bottom:1px solid var(--beige); white-space:nowrap;';
+    const ctd = 'padding:0.6rem 0.85rem; font-size:0.8rem; color:var(--text-dark); border-bottom:1px solid var(--beige); vertical-align:top;';
+    const claimRows = claims.map(c => {
+      let sel = c.plan === 'bundle' ? 'Full bundle (Wks 2–4)'
+              : c.plan === 'weekly' ? ('Week ' + (c.week != null ? c.week : '?'))
+              : ('Days ' + ((c.days || []).join(', ') || '?'));
+      const when = c.created_at ? new Date(c.created_at).toLocaleString() : '—';
+      const amt = '$' + ((c.amount_cents || 0) / 100).toFixed(2);
+      return `<tr>
+        <td style="${ctd}">${_adminEsc(emailById[c.user_id] || c.user_id)}</td>
+        <td style="${ctd}">${_adminEsc(sel)}</td>
+        <td style="${ctd}">${_adminEsc(amt)}</td>
+        <td style="${ctd}">${_adminEsc((c.method || '').toUpperCase())}</td>
+        <td style="${ctd}">${_adminEsc(when)}</td>
+        <td style="${ctd}"><div style="display:flex; gap:0.3rem;">
+          <button onclick="adminApproveClaim(${c.id})" style="${ADMIN_BTN}">✓ Approve &amp; grant</button>
+          <button onclick="adminRejectClaim(${c.id})" style="${ADMIN_BTN_DANGER}">Reject</button>
+        </div></td></tr>`;
+    }).join('');
+    claimsBox.innerHTML = `
+      <div style="font-size:0.66rem; letter-spacing:0.14em; text-transform:uppercase; color:#c0813a; margin-bottom:0.75rem;">⏳ Pending payment requests (${claims.length}) — confirm the Venmo, then approve</div>
+      <div style="background:var(--white); border:1px solid #e6cfa8; border-radius:6px; overflow-x:auto;">
+        <table style="width:100%; border-collapse:collapse;">
+          <thead><tr><th style="${cth}">Member</th><th style="${cth}">Selected</th><th style="${cth}">Amount</th><th style="${cth}">Method</th><th style="${cth}">When</th><th style="${cth}">Action</th></tr></thead>
+          <tbody>${claimRows}</tbody>
+        </table>
+      </div>`;
+  } else {
+    claimsBox.innerHTML = '';
+  }
+
+  const th = 'padding:0.7rem 0.9rem; font-size:0.62rem; letter-spacing:0.12em; text-transform:uppercase; color:var(--text-muted); text-align:left; border-bottom:1px solid var(--beige); white-space:nowrap;';
+  const td = 'padding:0.7rem 0.9rem; font-size:0.8rem; color:var(--text-dark); border-bottom:1px solid var(--beige); vertical-align:top;';
+
+  const bodyRows = rows.map(r => {
+    const created = r.created_at ? new Date(r.created_at).toLocaleDateString() : '—';
+    const revenue = '$' + ((r.revenue_cents || 0) / 100).toFixed(2);
+    const uid = _adminEsc(r.id);
+    return `
+      <tr>
+        <td style="${td}">${_adminEsc(r.email || '—')}</td>
+        <td style="${td}">${_adminEsc(created)}</td>
+        <td style="${td}">${_adminFmtEnt(r)}</td>
+        <td style="${td}">${_adminEsc(revenue)}</td>
+        <td style="${td}; text-align:center;">${_adminEsc(r.days_completed || 0)}</td>
+        <td style="${td}">
+          <div style="display:flex; flex-wrap:wrap; gap:0.3rem;">
+            <button onclick="adminGrant('${uid}','bundle',null)" style="${ADMIN_BTN}">+ Bundle</button>
+            <button onclick="adminGrant('${uid}','week',2)" style="${ADMIN_BTN}">+ Wk2</button>
+            <button onclick="adminGrant('${uid}','week',3)" style="${ADMIN_BTN}">+ Wk3</button>
+            <button onclick="adminGrant('${uid}','week',4)" style="${ADMIN_BTN}">+ Wk4</button>
+            <button onclick="adminGrantDay('${uid}')" style="${ADMIN_BTN}">+ Day</button>
+            <button onclick="adminRevoke('${uid}')" style="${ADMIN_BTN_DANGER}">Revoke all</button>
+          </div>
+        </td>
+      </tr>`;
+  }).join('');
+
+  body.innerHTML = `
+    <table style="width:100%; border-collapse:collapse;">
+      <thead><tr>
+        <th style="${th}">Email</th><th style="${th}">Joined</th><th style="${th}">Entitlements</th>
+        <th style="${th}">Revenue</th><th style="${th}">Days</th><th style="${th}">Manage access</th>
+      </tr></thead>
+      <tbody>${bodyRows || '<tr><td style="' + td + '" colspan="6">No members yet.</td></tr>'}</tbody>
+    </table>`;
+}
+
+const ADMIN_BTN = "background:var(--cream); color:var(--navy); border:1px solid var(--beige-mid); border-radius:3px; padding:0.3rem 0.55rem; font-family:'Jost',sans-serif; font-size:0.64rem; letter-spacing:0.06em; text-transform:uppercase; cursor:pointer;";
+const ADMIN_BTN_DANGER = "background:#fbeaea; color:#c0392b; border:1px solid #e6bcbc; border-radius:3px; padding:0.3rem 0.55rem; font-family:'Jost',sans-serif; font-size:0.64rem; letter-spacing:0.06em; text-transform:uppercase; cursor:pointer;";
+
+async function adminGrant(userId, kind, ref){
+  if (!window.mpwcIsAdmin()) { alert('Admins only.'); return; }
+  // Default revenue per kind (cents) — adjust manually in DB if needed.
+  const amount = kind === 'bundle' ? 3000 : kind === 'week' ? 1300 : 300;
+  const { error } = await window.sb.from('mpwc_entitlements').insert({ user_id: userId, kind: kind, ref: ref, amount_cents: amount });
+  if (error){ alert('Grant failed: ' + error.message); return; }
+  await openAdminPanel();
+}
+
+async function adminGrantDay(userId){
+  const raw = prompt('Grant which day? (8–30)');
+  if (raw == null) return;
+  const day = parseInt(raw, 10);
+  if (!day || day < 1 || day > 30){ alert('Enter a day number 1–30.'); return; }
+  await adminGrant(userId, 'day', day);
+}
+
+async function adminRevoke(userId){
+  if (!window.mpwcIsAdmin()) { alert('Admins only.'); return; }
+  if (!confirm('Revoke ALL entitlements for this member?')) return;
+  const { error } = await window.sb.from('mpwc_entitlements').delete().eq('user_id', userId);
+  if (error){ alert('Revoke failed: ' + error.message); return; }
+  await openAdminPanel();
+}
+
+// Approve a pending payment request: grant the matching entitlement(s) from the
+// client's recorded selection, then mark the claim granted.
+async function adminApproveClaim(id){
+  if (!window.mpwcIsAdmin()) { alert('Admins only.'); return; }
+  const { data: c, error: e1 } = await window.sb.from('mpwc_payment_claims').select('*').eq('id', id).single();
+  if (e1 || !c){ alert('Could not load that request.'); return; }
+  const inserts = [];
+  if (c.plan === 'bundle') inserts.push({ user_id:c.user_id, kind:'bundle', ref:null, amount_cents:c.amount_cents });
+  else if (c.plan === 'weekly') inserts.push({ user_id:c.user_id, kind:'week', ref:c.week, amount_cents:c.amount_cents });
+  else if (c.plan === 'alacarte' && Array.isArray(c.days)) {
+    const per = Math.round((c.amount_cents || 0) / Math.max(c.days.length, 1));
+    c.days.forEach(d => inserts.push({ user_id:c.user_id, kind:'day', ref:d, amount_cents:per }));
+  }
+  for (const ins of inserts){
+    const { error } = await window.sb.from('mpwc_entitlements').insert(ins);
+    if (error && !/duplicate|already exists|23505/i.test(error.message)){ alert('Grant failed: ' + error.message); return; }
+  }
+  const { error: e2 } = await window.sb.from('mpwc_payment_claims').update({ status:'granted' }).eq('id', id);
+  if (e2){ alert('Granted, but could not update the request: ' + e2.message); }
+  await openAdminPanel();
+}
+
+async function adminRejectClaim(id){
+  if (!window.mpwcIsAdmin()) { alert('Admins only.'); return; }
+  if (!confirm('Reject this payment request? (no access will be granted)')) return;
+  const { error } = await window.sb.from('mpwc_payment_claims').update({ status:'rejected' }).eq('id', id);
+  if (error){ alert('Reject failed: ' + error.message); return; }
+  await openAdminPanel();
 }
 
 // ─────────────────────────────────────────────────────────────────
@@ -4078,17 +4287,10 @@ function bookCoaching(plan) {
 }
 
 function openMyDashboard() {
-  // Public entry point — sign-in flow gates the dashboard.
-  // - Brand new visitors → signup gate
-  // - Members with a password set → sign-in page
-  // - Members without a password (legacy / no-pw signup) → straight in
-  if (!isMember()) { showMemberGate(1, false); return; }
-  const profile = getMemberProfile();
-  const sessionActive = sessionStorage.getItem('mpwc_session') === '1';
-  if (profile && profile.pwHash && !sessionActive) {
-    openMemberLogin();
-    return;
-  }
+  // Public entry point — Supabase session gates the dashboard.
+  // - Signed in → straight to the dashboard
+  // - Signed out → sign-in page
+  if (!isSignedIn()) { openMemberLogin(); return; }
   openMemberDashboard();
 }
 
@@ -4138,13 +4340,12 @@ function showLoginMsg(type, text) {
   m.textContent = text;
 }
 
-function submitMemberLogin() {
+async function submitMemberLogin() {
   // Honeypot
   if (document.getElementById('login-hp').value.length > 0) return;
 
   const email = document.getElementById('login-email').value.trim().toLowerCase();
   const pw    = document.getElementById('login-password').value;
-  const remember = document.getElementById('login-remember').checked;
   const btn   = document.getElementById('login-btn');
 
   if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
@@ -4158,55 +4359,21 @@ function submitMemberLogin() {
     return;
   }
 
-  const profile = getMemberProfile();
-  // Match the email to the saved profile on this device
-  if (!profile || !profile.email || profile.email.toLowerCase() !== email) {
-    showLoginMsg('error', 'No account found for that email on this device.');
-    return;
-  }
-  if (!profile.pwHash) {
-    // Old member without a password set — accept and treat as legacy
-    setMember(email);
-    sessionStorage.setItem('mpwc_session', '1');
-    closeMemberLogin();
+  btn.disabled=true; btn.textContent='Signing in…'; showLoginMsg('info','Welcome back…');
+  try {
+    const { error } = await window.sb.auth.signInWithPassword({ email, password: pw });
+    if (error){ btn.disabled=false; btn.textContent='Sign In'; showLoginMsg('error','Incorrect email or password.'); return; }
+    await mpwcLoadState(); setMember(email);
+    btn.disabled=false; btn.textContent='Sign In'; closeMemberLogin();
+    const after=_afterAuthAction; _afterAuthAction=null;
+    if (after==='coaching'){ showCoachingPortal(); return; }
+    const d=_gatePendingDay, p=_gatePendingPreview;
+    if (d!=null){ _gatePendingDay=null; if(d<=7) openMemberLibrary(d,p); else openWorkout(d,p); return; }
     openMemberDashboard();
-    return;
-  }
-  if (simpleHash(pw) !== profile.pwHash) {
-    showLoginMsg('error', 'Incorrect password. Try again or reset.');
-    return;
-  }
-
-  btn.disabled = true; btn.textContent = 'Signing in…';
-  showLoginMsg('info', 'Welcome back…');
-
-  setMember(email);
-  if (remember) {
-    // already in localStorage by default — no-op
-  }
-  // Mark session active so they don't re-auth every dashboard click
-  sessionStorage.setItem('mpwc_session', '1');
-
-  setTimeout(() => {
-    btn.disabled = false; btn.textContent = 'Sign In';
-    closeMemberLogin();
-    const after = _afterAuthAction;
-    _afterAuthAction = null;
-    if (after === 'coaching') { showCoachingPortal(); return; }
-    // If they were trying to open a specific Day workout, go there
-    const d = _gatePendingDay, p = _gatePendingPreview;
-    if (d != null) {
-      _gatePendingDay = null;
-      if (d <= 7) openMemberLibrary(d, p); else openWorkout(d, p);
-      return;
-    }
-    openMemberDashboard();
-  }, 350);
+  } catch(e){ btn.disabled=false; btn.textContent='Sign In'; showLoginMsg('error','Network error. Try again.'); }
 }
 
-function forgotPassword() {
-  showLoginMsg('info', 'For password reset, contact hello@matpilateswithcaroline.com');
-}
+async function forgotPassword(){ const email=(document.getElementById('login-email').value||'').trim().toLowerCase(); if(!email||!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)){ showLoginMsg('error','Enter your email above first, then tap reset.'); return;} const { error } = await window.sb.auth.resetPasswordForEmail(email, { redirectTo: window.location.origin }); showLoginMsg(error?'error':'success', error?error.message:'Password reset link sent — check your email.'); }
 
 // ─────────────────────────────────────────────────────────────────
 //  CONTACT MODAL — footer "Contact" link
@@ -4394,14 +4561,14 @@ function openMemberDashboard() {
     rows.push({
       title: 'À la carte workouts',
       sub: sorted.length + ' day' + (sorted.length>1?'s':'') + ': ' + sorted.map(d=>'Day '+d).join(', '),
-      badge: '$' + (sorted.length * 2.99).toFixed(2), badgeBg: 'var(--cream)', badgeColor: 'var(--navy)'
+      badge: '$' + (sorted.length * 3), badgeBg: 'var(--cream)', badgeColor: 'var(--navy)'
     });
   }
   if (rows.length === 1) {
     rows.push({
       empty: true,
       title: 'Nothing purchased yet',
-      sub: 'Week 1 is on the house. Unlock more with weekly access ($12.99), à la carte ($2.99), or the full bundle ($29.99).'
+      sub: 'Week 1 is on the house. Unlock more with weekly access ($13), à la carte ($3), or the full bundle ($30).'
     });
   }
   rows.forEach(r => {
@@ -4422,6 +4589,10 @@ function openMemberDashboard() {
     }
     list.appendChild(row);
   });
+
+  // Admin entry point — only visible to admins.
+  const adminBtn = document.getElementById('md-admin-btn');
+  if (adminBtn) adminBtn.style.display = (typeof window.mpwcIsAdmin === 'function' && window.mpwcIsAdmin()) ? '' : 'none';
 
   const dash = document.getElementById('member-dashboard');
   dash.style.display = 'block';
@@ -4445,19 +4616,20 @@ function resumeNextWorkout() {
   if (next) openWorkout(next, next > 7); else openMemberLibrary();
 }
 
-// Show the "My Dashboard" nav link for anyone who has an account on this
-// device — they may still need to log in to actually open it.
+// Reveal the "My Dashboard" nav link + handle hash routes once the Supabase
+// session/state cache has loaded (routing must wait on it).
 document.addEventListener('DOMContentLoaded', function() {
-  const link = document.getElementById('nav-dashboard');
-  if (link && hasAccount()) link.style.display = '';
-  // Open dashboard from URL hash too
-  if ((window.location.hash || '').indexOf('/member/dashboard') !== -1) {
-    setTimeout(openMyDashboard, 200);
-  }
-  // Coaching portal hash route
-  if ((window.location.hash || '').indexOf('/member/coaching') !== -1) {
-    setTimeout(openCoachingPortal, 200);
-  }
+  window.authReady.then(function() {
+    const link = document.getElementById('nav-dashboard');
+    if (link) link.style.display = isSignedIn() ? '' : 'none';
+    const hash = window.location.hash || '';
+    // Admin route (admins only)
+    if (hash.indexOf('/admin') !== -1) { openAdminPanel(); return; }
+    // Open dashboard from URL hash too
+    if (hash.indexOf('/member/dashboard') !== -1) { openMyDashboard(); return; }
+    // Coaching portal hash route
+    if (hash.indexOf('/member/coaching') !== -1) { openCoachingPortal(); }
+  });
 });
 
 function showThankYou(email) {
@@ -4501,7 +4673,9 @@ function openWorkout(day, preview) {
   }
   // ── Lock restored: Days 8–30 are locked (blurred preview) until purchased.
   //    Set to `false` to unlock all 30 days for editing/preview.
-  isPreview = (preview === true) && day > 7;
+  // Lock state is driven by the REAL entitlement, not the caller's preview flag,
+  // so a locked day always shows the upsell UI regardless of how it was opened.
+  isPreview = !isDayUnlocked(day);
   currentDay = day;
   const modal = document.getElementById('workout-modal');
   modal.style.display = 'flex';
@@ -4528,10 +4702,10 @@ function closeWorkout() {
 
 // ── Private member portal state ─────────────────────────────────────────
 function getCompleted() {
-  try { return JSON.parse(localStorage.getItem('mpwc_completed') || '[]'); } catch (e) { return []; }
+  return (window.MPWC && window.MPWC.completed) ? window.MPWC.completed.slice() : [];
 }
 function setCompleted(arr) {
-  try { localStorage.setItem('mpwc_completed', JSON.stringify(arr)); } catch (e) {}
+  if (window.MPWC) window.MPWC.completed = arr.slice();
 }
 function updatePortalProgress() {
   const done = getCompleted();
@@ -4560,9 +4734,20 @@ function updatePortalProgress() {
 function markComplete() {
   const done = getCompleted();
   const i = done.indexOf(currentDay);
-  if (i === -1) done.push(currentDay); else done.splice(i, 1);
+  const adding = (i === -1);
+  if (adding) done.push(currentDay); else done.splice(i, 1);
   setCompleted(done);
   updatePortalProgress();
+  // Persist to DB (best-effort) — requires a signed-in user.
+  const u = window.MPWC && window.MPWC.user;
+  if (u) {
+    const day = currentDay;
+    if (adding) {
+      window.sb.from('mpwc_progress').insert({ user_id: u.id, day: day }).then(()=>{}, ()=>{});
+    } else {
+      window.sb.from('mpwc_progress').delete().eq('user_id', u.id).eq('day', day).then(()=>{}, ()=>{});
+    }
+  }
 }
 
 // Close modal when clicking the backdrop
@@ -4578,11 +4763,14 @@ document.addEventListener('keydown', function(e) {
 // On load, restore portal progress + open from URL hash if present
 document.addEventListener('DOMContentLoaded', function() {
   updatePortalProgress();
-  const m = (window.location.hash || '').match(/#\/member\/workout\/day-(\d+)/);
-  if (m) {
-    const d = parseInt(m[1], 10);
-    if (d >= 1 && d <= 30) openWorkout(d, d > 7);
-  }
+  window.authReady.then(function() {
+    const m = (window.location.hash || '').match(/#\/member\/workout\/day-(\d+)/);
+    if (m) {
+      const d = parseInt(m[1], 10);
+      // openWorkout itself guards signed-out users → login gate.
+      if (d >= 1 && d <= 30) openWorkout(d, d > 7);
+    }
+  });
 });
 
 function switchTab(tab) {
@@ -4601,6 +4789,15 @@ function renderWorkout(day) {
 
   // Week 1 is ALWAYS free — never locked. Only weeks 2-4 are locked when preview=true.
   const locked = w.week > 1 && isPreview;
+  // Real entitlement gate: when a day is NOT unlocked we must WITHHOLD the
+  // actual video/image clips and coaching cues from the DOM (teaser only),
+  // not merely blur them client-side.
+  const contentLocked = w.week > 1 && !isDayUnlocked(day);
+  // Render against a sanitized view of the exercises: locked days expose only
+  // the name + sets/reps. clipUrl and notes are removed entirely.
+  const exView = contentLocked
+    ? w.exercises.map(ex => ({ name: ex.name, sets: ex.sets, reps: ex.reps, workout: ex.workout, rounds: ex.rounds, clipUrl: '', muted: ex.muted, notes: '' }))
+    : w.exercises;
 
   // Reset to full-video tab
   switchTab('full');
@@ -4610,6 +4807,12 @@ function renderWorkout(day) {
   document.getElementById('wm-day-title').textContent   = w.title;
   document.getElementById('wm-meta').textContent        = w.duration + ' · ' + w.level;
   document.getElementById('wm-day-counter').textContent = 'Day ' + day + ' of 30';
+
+  // Locked days have no actionable buttons — you can't complete or print what you can't access.
+  try {
+    const _cb = document.getElementById('wm-complete-btn'); if (_cb) _cb.style.display = locked ? 'none' : '';
+    const _pb = document.getElementById('wm-pdf-btn');      if (_pb) _pb.style.display = locked ? 'none' : '';
+  } catch (e) {}
 
   // Prev/next
   document.getElementById('wm-prev').style.visibility = day > 1  ? 'visible' : 'hidden';
@@ -4625,7 +4828,7 @@ function renderWorkout(day) {
     </div>
     <div style="position:relative;">
       <div style="${locked ? 'filter:blur(5px);user-select:none;pointer-events:none;' : ''}">
-        ${w.exercises.map((ex, i) => `
+        ${exView.map((ex, i) => `
         <div style="border:1px solid var(--beige);border-radius:6px;overflow:hidden;margin-bottom:1rem;">
           <div style="display:flex;align-items:center;gap:1rem;padding:0.9rem 1.1rem;background:var(--cream);border-bottom:1px solid var(--beige);">
             <div style="font-family:'Cormorant Garamond',serif;font-size:1.6rem;font-weight:300;color:var(--blue-light);line-height:1;min-width:1.8rem;">${i+1}</div>
@@ -4670,7 +4873,7 @@ function renderWorkout(day) {
             <span style="font-size:1rem;">🔒</span>
             <span>Week ${w.week} preview — exercise names and cues are hidden until you unlock.</span>
           </div>
-          <button onclick="closeWorkout();openPayment('weekly')" style="background:var(--cream);color:var(--navy);border:none;border-radius:3px;padding:0.55rem 1rem;font-family:'Jost',sans-serif;font-size:0.68rem;font-weight:500;letter-spacing:0.12em;text-transform:uppercase;cursor:pointer;white-space:nowrap;flex-shrink:0;">Unlock $12.99</button>
+          <button onclick="closeWorkout();openPayment('weekly')" style="background:var(--cream);color:var(--navy);border:none;border-radius:3px;padding:0.55rem 1rem;font-family:'Jost',sans-serif;font-size:0.68rem;font-weight:500;letter-spacing:0.12em;text-transform:uppercase;cursor:pointer;white-space:nowrap;flex-shrink:0;">Unlock $13</button>
         </div>
       </div>` : ''}
     </div>`;
@@ -4686,7 +4889,7 @@ function renderWorkout(day) {
         let html = '';
         let lastWorkout = null;
         let inBlockIndex = 0;
-        w.exercises.forEach((ex, i) => {
+        exView.forEach((ex, i) => {
           // Insert a group header whenever the `workout` block changes
           if (ex.workout != null && ex.workout !== lastWorkout) {
             lastWorkout = ex.workout;
@@ -4742,7 +4945,7 @@ function renderWorkout(day) {
             <span style="font-size:1rem;">🔒</span>
             <span>Week ${w.week} preview — exercises hidden until unlocked.</span>
           </div>
-          <button onclick="closeWorkout();openPayment('weekly')" style="background:var(--cream);color:var(--navy);border:none;border-radius:3px;padding:0.55rem 1rem;font-family:'Jost',sans-serif;font-size:0.68rem;font-weight:500;letter-spacing:0.12em;text-transform:uppercase;cursor:pointer;white-space:nowrap;flex-shrink:0;">Unlock $12.99</button>
+          <button onclick="closeWorkout();openPayment('weekly')" style="background:var(--cream);color:var(--navy);border:none;border-radius:3px;padding:0.55rem 1rem;font-family:'Jost',sans-serif;font-size:0.68rem;font-weight:500;letter-spacing:0.12em;text-transform:uppercase;cursor:pointer;white-space:nowrap;flex-shrink:0;">Unlock $13</button>
         </div>
       </div>` : '';
   }
@@ -4763,14 +4966,15 @@ function navWorkout(dir) {
   const next = currentDay + dir;
   if (next < 1 || next > 30) return;
   currentDay = next;
-  isPreview = WORKOUTS[next].week > 1;
+  isPreview = !isDayUnlocked(next);
   renderWorkout(next);
   document.getElementById('wm-week-pdf-btn').style.display = (WORKOUTS[next].week === 1) ? 'inline-block' : 'none';
   document.getElementById('workout-modal').scrollTop = 0;
 }
 
 function printFullWeek() {
-  const days = [1,2,3,4,5,6,7];
+  const days = [1,2,3,4,5,6,7].filter(d => isDayUnlocked(d));
+  if (!days.length) { alert('No unlocked days to print — unlock your content first.'); return; }
   const weekTitle = 'Week 1 — Foundation & Awareness';
 
   const dayPages = days.map(d => {
@@ -4867,6 +5071,7 @@ function printFullWeek() {
 function printWorkout() {
   const w = WORKOUTS[currentDay];
   if (!w) return;
+  if (!isDayUnlocked(currentDay)) { alert('This day is locked — unlock it to print.'); return; }
   const weekNames = {1:'Week 1 — Foundation & Awareness',2:'Week 2 — Build & Strengthen',3:'Week 3 — Deepen & Expand',4:'Week 4 — Integrate & Transform'};
   const exHtml = w.exercises.map((ex,i) => `
     <div class="print-exercise">
