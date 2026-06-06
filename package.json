@@ -1,0 +1,9 @@
+{
+  "name": "matpilateswithcaroline",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Mat Pilates with Caroline — local preview only (these two files do not affect the live Cloudflare site)",
+  "scripts": {
+    "dev": "node server.js"
+  }
+}
