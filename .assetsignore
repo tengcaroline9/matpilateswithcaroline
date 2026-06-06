@@ -1,0 +1,12 @@
+node_modules
+.git
+.gitignore
+.wrangler
+bun.lock
+package-lock.json
+package.json
+server.js
+wrangler.jsonc
+.assetsignore
+supabase
+*.md
