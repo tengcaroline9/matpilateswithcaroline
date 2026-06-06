@@ -2604,6 +2604,22 @@ window.mpwcIsAdmin = function() {
   </div>
 </div>
 
+<!-- Admin day picker — select days to grant (instead of typing a number) -->
+<div id="admin-day-picker" style="display:none; position:fixed; inset:0; z-index:710; background:rgba(27,46,74,0.45); align-items:center; justify-content:center; padding:1.5rem;">
+  <div style="background:var(--white); border-radius:8px; max-width:520px; width:100%; padding:2rem 2.25rem; box-shadow:0 24px 64px rgba(27,46,74,0.18); max-height:88vh; overflow-y:auto;">
+    <div style="font-family:'Cormorant Garamond',serif; font-size:1.5rem; font-weight:300; color:var(--navy); margin-bottom:0.25rem;">Grant individual days</div>
+    <div id="adp-member" style="font-size:0.78rem; color:var(--text-muted); margin-bottom:1.25rem;"></div>
+    <div id="adp-grid"></div>
+    <div style="display:flex; justify-content:space-between; align-items:center; gap:1rem; margin-top:1.5rem; padding-top:1.25rem; border-top:1px solid var(--beige);">
+      <span style="font-size:0.8rem; color:var(--text-mid);"><span id="adp-count">0</span> day(s) selected</span>
+      <div style="display:flex; gap:0.6rem;">
+        <button onclick="closeAdminDayPicker()" style="padding:0.7rem 1.4rem; background:var(--cream); color:var(--navy); border:1px solid var(--beige-mid); border-radius:2px; cursor:pointer; font-family:'Jost',sans-serif; font-size:0.72rem; letter-spacing:0.1em; text-transform:uppercase;">Cancel</button>
+        <button onclick="adminDayPickerGrant()" style="padding:0.7rem 1.4rem; background:var(--navy); color:var(--cream); border:none; border-radius:2px; cursor:pointer; font-family:'Jost',sans-serif; font-size:0.72rem; letter-spacing:0.1em; text-transform:uppercase;">Grant selected</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- ============================================================
      MEMBER LIBRARY — private dashboard listing all Week 1 workouts
      Opens after the email gate is submitted (or via "View library")
@@ -4163,7 +4179,7 @@ async function openAdminPanel(){
             <button onclick="adminGrant('${uid}','week',2)" style="${ADMIN_BTN}">+ Wk2</button>
             <button onclick="adminGrant('${uid}','week',3)" style="${ADMIN_BTN}">+ Wk3</button>
             <button onclick="adminGrant('${uid}','week',4)" style="${ADMIN_BTN}">+ Wk4</button>
-            <button onclick="adminGrantDay('${uid}')" style="${ADMIN_BTN}">+ Day</button>
+            <button onclick="adminGrantDay('${uid}','${_adminEsc(r.email || '')}')" style="${ADMIN_BTN}">+ Days</button>
             <button onclick="adminRevoke('${uid}')" style="${ADMIN_BTN_DANGER}">Revoke all</button>
           </div>
         </td>
@@ -4192,12 +4208,52 @@ async function adminGrant(userId, kind, ref){
   await openAdminPanel();
 }
 
-async function adminGrantDay(userId){
-  const raw = prompt('Grant which day? (8–30)');
-  if (raw == null) return;
-  const day = parseInt(raw, 10);
-  if (!day || day < 1 || day > 30){ alert('Enter a day number 1–30.'); return; }
-  await adminGrant(userId, 'day', day);
+// Open a visual day picker (select days to grant, no typing).
+let _adpUser = null;
+let _adpSelected = [];
+function adminGrantDay(userId, memberEmail){
+  if (!window.mpwcIsAdmin()) { alert('Admins only.'); return; }
+  _adpUser = userId;
+  _adpSelected = [];
+  document.getElementById('adp-member').textContent = memberEmail ? ('for ' + memberEmail) : '';
+  // Build day buttons grouped by week (days 8–30; week 1 is always free).
+  const weeks = [
+    { label: 'Week 2', days: [8,9,10,11,12,13,14] },
+    { label: 'Week 3', days: [15,16,17,18,19,20,21] },
+    { label: 'Week 4', days: [22,23,24,25,26,27,28,29,30] },
+  ];
+  const grid = document.getElementById('adp-grid');
+  grid.innerHTML = weeks.map(w => `
+    <div style="margin-bottom:1rem;">
+      <div style="font-size:0.62rem; letter-spacing:0.14em; text-transform:uppercase; color:var(--text-muted); margin-bottom:0.5rem;">${w.label}</div>
+      <div style="display:flex; flex-wrap:wrap; gap:0.4rem;">
+        ${w.days.map(d => `<button type="button" data-day="${d}" data-on="0" onclick="adpToggle(this)" style="padding:0.4rem 0.7rem; border:1px solid var(--beige); border-radius:3px; background:var(--cream); cursor:pointer; font-family:Jost,sans-serif; font-size:0.74rem; color:var(--text-mid); transition:all 0.15s;">Day ${d}</button>`).join('')}
+      </div>
+    </div>`).join('');
+  document.getElementById('adp-count').textContent = '0';
+  document.getElementById('admin-day-picker').style.display = 'flex';
+}
+function adpToggle(btn){
+  const d = parseInt(btn.dataset.day, 10);
+  if (btn.dataset.on === '1'){
+    btn.dataset.on = '0'; btn.style.background='var(--cream)'; btn.style.borderColor='var(--beige)'; btn.style.color='var(--text-mid)';
+    _adpSelected = _adpSelected.filter(x => x !== d);
+  } else {
+    btn.dataset.on = '1'; btn.style.background='var(--navy)'; btn.style.borderColor='var(--navy)'; btn.style.color='#F8F4ED';
+    if (!_adpSelected.includes(d)) _adpSelected.push(d);
+  }
+  document.getElementById('adp-count').textContent = _adpSelected.length;
+}
+function closeAdminDayPicker(){ document.getElementById('admin-day-picker').style.display = 'none'; }
+async function adminDayPickerGrant(){
+  if (!window.mpwcIsAdmin()) { alert('Admins only.'); return; }
+  if (!_adpSelected.length){ alert('Pick at least one day.'); return; }
+  for (const d of _adpSelected.slice().sort((a,b)=>a-b)){
+    const { error } = await window.sb.from('mpwc_entitlements').insert({ user_id:_adpUser, kind:'day', ref:d, amount_cents:300 });
+    if (error && !/duplicate|already exists|23505/i.test(error.message)){ alert('Grant failed for day ' + d + ': ' + error.message); return; }
+  }
+  closeAdminDayPicker();
+  await openAdminPanel();
 }
 
 async function adminRevoke(userId){
