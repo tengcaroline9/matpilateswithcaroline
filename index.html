@@ -1781,7 +1781,7 @@ window.mpwcIsAdmin = function() {
 </div>
 
 <!-- PAYMENT MODAL -->
-<div id="payment-modal" style="display:none; position:fixed; inset:0; z-index:500; background:rgba(27,26,22,0.55); backdrop-filter:blur(4px); align-items:center; justify-content:center; padding:1.5rem;">
+<div id="payment-modal" style="display:none; position:fixed; inset:0; z-index:690; background:rgba(27,26,22,0.55); backdrop-filter:blur(4px); align-items:center; justify-content:center; padding:1.5rem;">
   <div style="background:var(--white); border-radius:8px; max-width:520px; width:100%; padding:2.5rem; position:relative; box-shadow:0 24px 64px rgba(27,46,74,0.18);">
 
     <!-- Close -->
@@ -1856,6 +1856,42 @@ window.mpwcIsAdmin = function() {
     <p style="font-size:0.75rem; color:var(--text-muted); line-height:1.7; text-align:center;">
       After clicking, complete your payment in Venmo.<br>We unlock your access once we confirm the transfer — usually within a few hours. Questions? <a href="mailto:hello@matpilateswithcaroline.com" style="color:var(--navy-mid);">Contact Caroline</a>.
     </p>
+
+  </div>
+</div>
+
+<!-- Plan chooser — compact overlay so members can add a week/plan without leaving the dashboard/workout -->
+<div id="plan-chooser" style="display:none; position:fixed; inset:0; z-index:660; background:rgba(27,46,74,0.55); backdrop-filter:blur(4px); align-items:center; justify-content:center; padding:1.5rem;">
+  <div style="background:var(--white); border-radius:8px; max-width:440px; width:100%; padding:2.25rem; position:relative; box-shadow:0 24px 64px rgba(27,46,74,0.18);">
+
+    <!-- Close -->
+    <button onclick="closePlanChooser()" style="position:absolute; top:1.1rem; right:1.1rem; background:none; border:none; cursor:pointer; font-size:1.25rem; color:var(--text-muted); line-height:1;">✕</button>
+
+    <!-- Header -->
+    <div style="margin-bottom:1.5rem;">
+      <div style="font-size:0.65rem; letter-spacing:0.18em; text-transform:uppercase; color:var(--navy-mid); margin-bottom:0.5rem;">Members</div>
+      <div style="font-family:'Cormorant Garamond',serif; font-size:1.75rem; font-weight:300; color:var(--text-dark); line-height:1.2;">Add to your program</div>
+    </div>
+
+    <!-- Options -->
+    <button type="button" onclick="closePlanChooser(); openPayment('weekly')" style="display:block; width:100%; text-align:left; background:var(--off-white); border:1px solid var(--beige); border-radius:5px; padding:1rem 1.25rem; margin-bottom:0.75rem; cursor:pointer; transition:all 0.2s; font-family:'Jost',sans-serif;" onmouseover="this.style.borderColor='var(--navy)';this.style.background='var(--cream)';" onmouseout="this.style.borderColor='var(--beige)';this.style.background='var(--off-white)';">
+      <span style="display:block; font-size:0.9rem; font-weight:500; color:var(--text-dark); margin-bottom:0.2rem;">Unlock a week <span style="color:var(--navy-mid);">— $13</span></span>
+      <span style="display:block; font-size:0.75rem; color:var(--text-muted); line-height:1.5;">Open a full week of workouts at once.</span>
+    </button>
+
+    <button type="button" onclick="closePlanChooser(); openPayment('alacarte')" style="display:block; width:100%; text-align:left; background:var(--off-white); border:1px solid var(--beige); border-radius:5px; padding:1rem 1.25rem; margin-bottom:0.75rem; cursor:pointer; transition:all 0.2s; font-family:'Jost',sans-serif;" onmouseover="this.style.borderColor='var(--navy)';this.style.background='var(--cream)';" onmouseout="this.style.borderColor='var(--beige)';this.style.background='var(--off-white)';">
+      <span style="display:block; font-size:0.9rem; font-weight:500; color:var(--text-dark); margin-bottom:0.2rem;">Pick individual days <span style="color:var(--navy-mid);">— $3 each</span></span>
+      <span style="display:block; font-size:0.75rem; color:var(--text-muted); line-height:1.5;">Choose only the days you want.</span>
+    </button>
+
+    <button type="button" onclick="closePlanChooser(); openPayment('bundle')" style="display:block; width:100%; text-align:left; background:var(--navy); border:1px solid var(--navy); border-radius:5px; padding:1rem 1.25rem; cursor:pointer; transition:all 0.2s; font-family:'Jost',sans-serif;" onmouseover="this.style.background='var(--navy-mid)';this.style.borderColor='var(--navy-mid)';" onmouseout="this.style.background='var(--navy)';this.style.borderColor='var(--navy)';">
+      <span style="display:block; font-size:0.9rem; font-weight:500; color:var(--cream); margin-bottom:0.2rem;">Full program (Weeks 2–4) <span style="color:var(--blue-light);">— $30</span></span>
+      <span style="display:block; font-size:0.75rem; color:rgba(248,244,237,0.6); line-height:1.5;">Best value — every remaining workout.</span>
+    </button>
+
+    <div style="text-align:center; margin-top:1.25rem;">
+      <button type="button" onclick="closePlanChooser()" style="background:none; border:none; color:var(--text-muted); font-family:'Jost',sans-serif; font-size:0.72rem; letter-spacing:0.1em; text-transform:uppercase; cursor:pointer;">Cancel</button>
+    </div>
 
   </div>
 </div>
@@ -1955,6 +1991,22 @@ window.mpwcIsAdmin = function() {
   function closePayment() {
     document.getElementById('payment-modal').style.display = 'none';
     document.body.style.overflow = '';
+  }
+
+  function openPlanChooser() {
+    document.getElementById('plan-chooser').style.display = 'flex';
+    document.body.style.overflow = 'hidden';
+  }
+
+  function closePlanChooser() {
+    document.getElementById('plan-chooser').style.display = 'none';
+    // Only restore scroll if no other full overlay is still open underneath.
+    if (document.getElementById('workout-modal').style.display !== 'flex'
+        && document.getElementById('member-library').style.display !== 'block'
+        && document.getElementById('member-dashboard').style.display !== 'block'
+        && document.getElementById('coaching-portal').style.display !== 'block') {
+      document.body.style.overflow = '';
+    }
   }
 
   function buildDayButtons() {
@@ -2372,7 +2424,7 @@ window.mpwcIsAdmin = function() {
       </div>
       <div style="display:flex; align-items:center; gap:1rem;">
         <span id="cp-member-email" style="font-size:0.72rem; color:rgba(248,244,237,0.7);"></span>
-        <button onclick="closeCoachingPortal()" style="background:transparent; border:1px solid rgba(168,189,214,0.3); border-radius:2px; padding:0.4rem 0.75rem; color:var(--blue-light); font-family:'Jost',sans-serif; font-size:0.65rem; letter-spacing:0.12em; text-transform:uppercase; cursor:pointer; transition:all 0.2s;" onmouseover="this.style.background='rgba(168,189,214,0.12)';this.style.color='var(--cream)';" onmouseout="this.style.background='transparent';this.style.color='var(--blue-light)';">← Exit</button>
+        <button onclick="closeCoachingPortal()" style="background:var(--cream); border:1px solid var(--cream); border-radius:3px; padding:0.5rem 1rem; color:var(--navy); font-family:'Jost',sans-serif; font-size:0.68rem; font-weight:600; letter-spacing:0.12em; text-transform:uppercase; cursor:pointer; transition:all 0.2s;" onmouseover="this.style.background='var(--blue-light)';this.style.borderColor='var(--blue-light)';" onmouseout="this.style.background='var(--cream)';this.style.borderColor='var(--cream)';">← Back</button>
       </div>
     </div>
 
@@ -2481,6 +2533,11 @@ window.mpwcIsAdmin = function() {
         </div>
       </div>
     </div>
+
+    <!-- Bottom back affordance -->
+    <div style="padding:0 2.5rem 3rem; text-align:center;">
+      <button onclick="closeCoachingPortal()" style="background:none; color:var(--navy); border:1px solid var(--navy); border-radius:3px; padding:0.8rem 1.75rem; font-family:'Jost',sans-serif; font-size:0.7rem; font-weight:500; letter-spacing:0.14em; text-transform:uppercase; cursor:pointer; transition:all 0.2s;" onmouseover="this.style.background='var(--navy)';this.style.color='var(--cream)';" onmouseout="this.style.background='none';this.style.color='var(--navy)';">← Back to home</button>
+    </div>
   </div>
 </div>
 
@@ -2577,7 +2634,7 @@ window.mpwcIsAdmin = function() {
       <div id="md-purchases" style="display:flex; flex-direction:column; gap:0.75rem;"></div>
       <div style="margin-top:1.25rem; padding-top:1.25rem; border-top:1px solid var(--beige); display:flex; justify-content:space-between; align-items:center; gap:1rem;">
         <span style="font-size:0.78rem; color:var(--text-muted);">Need more? Unlock more weeks or grab the full bundle.</span>
-        <button onclick="closeMemberDashboard();document.getElementById('pricing').scrollIntoView({behavior:'smooth'});" style="background:none; color:var(--navy); border:1px solid var(--navy); border-radius:3px; padding:0.6rem 1.1rem; font-family:'Jost',sans-serif; font-size:0.68rem; font-weight:500; letter-spacing:0.14em; text-transform:uppercase; cursor:pointer; transition:all 0.2s;" onmouseover="this.style.background='var(--navy)';this.style.color='var(--cream)';" onmouseout="this.style.background='none';this.style.color='var(--navy)';">View plans</button>
+        <button onclick="openPlanChooser()" style="background:none; color:var(--navy); border:1px solid var(--navy); border-radius:3px; padding:0.6rem 1.1rem; font-family:'Jost',sans-serif; font-size:0.68rem; font-weight:500; letter-spacing:0.14em; text-transform:uppercase; cursor:pointer; transition:all 0.2s;" onmouseover="this.style.background='var(--navy)';this.style.color='var(--cream)';" onmouseout="this.style.background='none';this.style.color='var(--navy)';">Add a week</button>
       </div>
     </div>
   </div>
@@ -3929,6 +3986,10 @@ document.addEventListener('DOMContentLoaded', function() {
   document.addEventListener('keydown', function(e) {
     if (e.key === 'Escape' && document.getElementById('member-gate').style.display === 'flex') closeMemberGate();
   });
+  // Esc closes the coaching portal when it's visible
+  document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape' && document.getElementById('coaching-portal').style.display === 'block') closeCoachingPortal();
+  });
 });
 
 // ─────────────────────────────────────────────────────────────────
@@ -4929,7 +4990,7 @@ function renderWorkout(day) {
             <span style="font-size:1rem;">🔒</span>
             <span>Week ${w.week} preview — exercise names and cues are hidden until you unlock.</span>
           </div>
-          <button onclick="closeWorkout();openPayment('weekly')" style="background:var(--cream);color:var(--navy);border:none;border-radius:3px;padding:0.55rem 1rem;font-family:'Jost',sans-serif;font-size:0.68rem;font-weight:500;letter-spacing:0.12em;text-transform:uppercase;cursor:pointer;white-space:nowrap;flex-shrink:0;">Unlock $13</button>
+          <button onclick="openPlanChooser()" style="background:var(--cream);color:var(--navy);border:none;border-radius:3px;padding:0.55rem 1rem;font-family:'Jost',sans-serif;font-size:0.68rem;font-weight:500;letter-spacing:0.12em;text-transform:uppercase;cursor:pointer;white-space:nowrap;flex-shrink:0;">Unlock more</button>
         </div>
       </div>` : ''}
     </div>`;
@@ -5001,7 +5062,7 @@ function renderWorkout(day) {
             <span style="font-size:1rem;">🔒</span>
             <span>Week ${w.week} preview — exercises hidden until unlocked.</span>
           </div>
-          <button onclick="closeWorkout();openPayment('weekly')" style="background:var(--cream);color:var(--navy);border:none;border-radius:3px;padding:0.55rem 1rem;font-family:'Jost',sans-serif;font-size:0.68rem;font-weight:500;letter-spacing:0.12em;text-transform:uppercase;cursor:pointer;white-space:nowrap;flex-shrink:0;">Unlock $13</button>
+          <button onclick="openPlanChooser()" style="background:var(--cream);color:var(--navy);border:none;border-radius:3px;padding:0.55rem 1rem;font-family:'Jost',sans-serif;font-size:0.68rem;font-weight:500;letter-spacing:0.12em;text-transform:uppercase;cursor:pointer;white-space:nowrap;flex-shrink:0;">Unlock more</button>
         </div>
       </div>` : '';
   }
