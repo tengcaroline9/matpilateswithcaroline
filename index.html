@@ -2418,8 +2418,10 @@ window.mpwcIsAdmin = function() {
     <!-- Portal chrome -->
     <div style="position:sticky; top:0; z-index:20; background:#0F1A2B; color:var(--cream); padding:0.65rem 1.5rem; display:flex; align-items:center; justify-content:space-between; gap:1rem; font-size:0.72rem; letter-spacing:0.04em; border-bottom:1px solid rgba(168,189,214,0.15);">
       <div style="display:flex; align-items:center; gap:0.5rem;">
-        <span style="width:6px; height:6px; border-radius:50%; background:#7BC495; box-shadow:0 0 8px rgba(123,196,149,0.7); display:inline-block;"></span>
-        <span style="font-family:'Cormorant Garamond',serif; font-size:0.95rem;">MatPilates<span style="font-style:italic; color:var(--blue-light);">WithCaroline</span></span>
+        <span onclick="closeCoachingPortal()" title="Back to home" style="display:flex; align-items:center; gap:0.5rem; cursor:pointer;">
+          <span style="width:6px; height:6px; border-radius:50%; background:#7BC495; box-shadow:0 0 8px rgba(123,196,149,0.7); display:inline-block;"></span>
+          <span style="font-family:'Cormorant Garamond',serif; font-size:0.95rem;">MatPilates<span style="font-style:italic; color:var(--blue-light);">WithCaroline</span></span>
+        </span>
         <span style="font-size:0.58rem; letter-spacing:0.18em; text-transform:uppercase; color:var(--blue-light); padding:0.18rem 0.5rem; border:1px solid rgba(168,189,214,0.3); border-radius:2px; margin-left:0.5rem;">1:1 Coaching</span>
       </div>
       <div style="display:flex; align-items:center; gap:1rem;">
