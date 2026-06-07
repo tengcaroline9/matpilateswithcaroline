@@ -1285,7 +1285,7 @@ async function mpwcLoadState() {
   }
   window.MPWC.ready = true;
   // reveal dashboard nav link if logged in
-  try { const link = document.getElementById('nav-dashboard'); if (link) link.style.display = window.MPWC.user ? '' : 'none'; } catch(e){}
+  try { const link = document.getElementById('nav-dashboard'); if (link) link.style.display = ''; } catch(e){}
 }
 
 // authReady resolves once the FIRST state load completes — routing waits on it.
@@ -1313,7 +1313,7 @@ window.mpwcIsAdmin = function() {
     <li><a href="#about">About</a></li>
     <li><a href="#pricing">Pricing</a></li>
     <li><a href="#faq">FAQ</a></li>
-    <li><a href="#" onclick="event.preventDefault();openMyDashboard();" id="nav-dashboard" style="display:none;">My Dashboard</a></li>
+    <li><a href="#" onclick="event.preventDefault();openMyDashboard();" id="nav-dashboard">My Dashboard</a></li>
     <li><a href="#start" class="nav-cta">Start Today</a></li>
   </ul>
 </nav>
@@ -2225,6 +2225,7 @@ window.mpwcIsAdmin = function() {
         <li><a href="#about">About Caroline</a></li>
         <li><a href="#">Blog</a></li>
         <li><a href="#" onclick="event.preventDefault();openContactModal();">Contact</a></li>
+        <li style="margin-top:0.9rem;"><a href="#" onclick="event.preventDefault();openMyDashboard();" style="display:inline-block; padding:0.6rem 1.15rem; background:var(--cream); color:var(--navy)!important; border-radius:3px; font-weight:600; letter-spacing:0.08em; text-transform:uppercase; font-size:0.72rem; white-space:nowrap;" onmouseover="this.style.background='#fff';" onmouseout="this.style.background='var(--cream)';">Member Dashboard →</a></li>
       </ul>
     </div>
     <div>
@@ -4740,7 +4741,7 @@ function resumeNextWorkout() {
 document.addEventListener('DOMContentLoaded', function() {
   window.authReady.then(function() {
     const link = document.getElementById('nav-dashboard');
-    if (link) link.style.display = isSignedIn() ? '' : 'none';
+    if (link) link.style.display = '';
     const hash = window.location.hash || '';
     // Admin route (admins only)
     if (hash.indexOf('/admin') !== -1) { openAdminPanel(); return; }
