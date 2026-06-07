@@ -43,8 +43,8 @@ language sql stable
 as $$
   select coalesce(
     (auth.jwt() ->> 'email') in (
-      'andresescobedolara@gmail.com'
-      -- , 'caroline@...'   <-- add Caroline's login email here
+      'andresescobedolara@gmail.com',
+      'tengcaroline9@gmail.com'
     ),
     false
   );

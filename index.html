@@ -1294,6 +1294,7 @@ window.authReady = mpwcLoadState();
 // Keep cache fresh on auth changes (login/logout in this or another tab).
 window.sb.auth.onAuthStateChange((event) => {
   if (event === 'SIGNED_OUT') { window.MPWC.user=null; window.MPWC.ent={bundle:null,weeks:[],alacarte:[],history:[]}; window.MPWC.completed=[]; }
+  else if (event === 'PASSWORD_RECOVERY') { mpwcLoadState(); if (typeof openPasswordReset === 'function') openPasswordReset(); }
   else { mpwcLoadState(); }
 });
 
@@ -1909,10 +1910,41 @@ window.mpwcIsAdmin = function() {
   </div>
 </div>
 
+<!-- Password reset — shown after the user clicks the recovery link from their email -->
+<div id="password-reset" data-screen-label="Set a New Password" style="display:none; position:fixed; inset:0; z-index:720; background:rgba(15,26,43,0.82); backdrop-filter:blur(10px); align-items:center; justify-content:center; padding:1.5rem;">
+  <div style="background:var(--white); border-radius:10px; max-width:440px; width:100%; box-shadow:0 32px 80px rgba(0,0,0,0.4); overflow:hidden;">
+    <div style="background:#0F1A2B; padding:0.75rem 1.5rem; display:flex; align-items:center; gap:0.7rem; color:var(--cream); font-size:0.72rem;">
+      <span style="width:6px; height:6px; border-radius:50%; background:#7BC495; box-shadow:0 0 8px rgba(123,196,149,0.7); display:inline-block;"></span>
+      <span style="font-family:'Cormorant Garamond',serif; font-size:0.95rem;">MatPilates<span style="font-style:italic; color:var(--blue-light);">WithCaroline</span></span>
+      <span style="font-size:0.58rem; letter-spacing:0.18em; text-transform:uppercase; color:var(--blue-light); padding:0.18rem 0.5rem; border:1px solid rgba(168,189,214,0.3); border-radius:2px; margin-left:auto;">Reset Password</span>
+    </div>
+    <div style="padding:2.5rem 2.5rem 2rem;">
+      <div style="font-family:'Cormorant Garamond',serif; font-size:1.75rem; font-weight:300; color:var(--text-dark); line-height:1.2; margin-bottom:0.5rem;">Set a new password</div>
+      <p style="font-size:0.82rem; color:var(--text-muted); line-height:1.7; margin-bottom:1.5rem;">Choose a new password for your account. Minimum 8 characters.</p>
+      <label style="font-size:0.7rem; letter-spacing:0.1em; text-transform:uppercase; color:var(--text-muted); display:block; margin-bottom:0.4rem;">New password</label>
+      <input id="pr-password" type="password" autocomplete="new-password" placeholder="••••••••" style="width:100%; padding:0.85rem 1rem; border:1px solid var(--beige-mid); border-radius:4px; font-family:'Jost',sans-serif; font-size:0.9rem; color:var(--text-dark); margin-bottom:1rem; box-sizing:border-box;">
+      <label style="font-size:0.7rem; letter-spacing:0.1em; text-transform:uppercase; color:var(--text-muted); display:block; margin-bottom:0.4rem;">Confirm password</label>
+      <input id="pr-confirm" type="password" autocomplete="new-password" placeholder="••••••••" style="width:100%; padding:0.85rem 1rem; border:1px solid var(--beige-mid); border-radius:4px; font-family:'Jost',sans-serif; font-size:0.9rem; color:var(--text-dark); margin-bottom:0.5rem; box-sizing:border-box;">
+      <p id="pr-msg" style="font-size:0.78rem; min-height:1.2em; margin:0 0 1rem; color:var(--navy-mid);"></p>
+      <button id="pr-btn" onclick="submitPasswordReset()" style="width:100%; padding:0.95rem; background:var(--navy); color:var(--cream); border:none; border-radius:4px; cursor:pointer; font-family:'Jost',sans-serif; font-size:0.75rem; font-weight:600; letter-spacing:0.12em; text-transform:uppercase;">Update Password</button>
+    </div>
+  </div>
+</div>
+
 <script>
-  function closePaymentConfirm(){ document.getElementById('payment-confirm').style.display='none'; document.body.style.overflow=''; }
+  // Only unlock body scroll if no other full-screen overlay is still open underneath.
+  function _mpwcRestoreScrollIfNoOverlay(){
+    const overlays = ['workout-modal','member-dashboard','member-library','coaching-portal','mpwc-admin','plan-chooser'];
+    const anyOpen = overlays.some(id => {
+      const el = document.getElementById(id);
+      if (!el) return false;
+      const d = el.style.display;
+      return d === 'flex' || d === 'block';
+    });
+    if (!anyOpen) document.body.style.overflow = '';
+  }
+  function closePaymentConfirm(){ document.getElementById('payment-confirm').style.display='none'; _mpwcRestoreScrollIfNoOverlay(); }
   // ---- Payment modal logic ----
-  const PAYPAL_USERNAME = '@MatPilatesCaroline'; // ← replace with your PayPal.me link
   const VENMO_USERNAME  = '@carolineteng';
 
   const plans = {
@@ -1990,7 +2022,7 @@ window.mpwcIsAdmin = function() {
 
   function closePayment() {
     document.getElementById('payment-modal').style.display = 'none';
-    document.body.style.overflow = '';
+    _mpwcRestoreScrollIfNoOverlay();
   }
 
   function openPlanChooser() {
@@ -2082,6 +2114,13 @@ window.mpwcIsAdmin = function() {
     // RECORD the client's selection in the backend (status: pending) BEFORE
     // sending them to Venmo, so the admin sees exactly what to grant.
     try {
+      // Dedup: clear this member's prior PENDING claims for the same plan
+      // (+ same week, when applicable) so duplicate rows don't pile up when
+      // they click Pay more than once. The fresh insert below replaces them.
+      let dedup = window.sb.from('mpwc_payment_claims')
+        .delete().eq('user_id', user.id).eq('status', 'pending').eq('plan', currentPlan);
+      if (week != null) dedup = dedup.eq('week', week);
+      await dedup;
       const { error } = await window.sb.from('mpwc_payment_claims').insert({
         user_id: user.id, plan: currentPlan, week: week, days: days,
         amount_cents: Math.round(parseFloat(amount) * 100), method: method, note: note, status: 'pending'
@@ -2089,23 +2128,17 @@ window.mpwcIsAdmin = function() {
       if (error) console.warn('[mpwc] could not record payment claim:', error.message);
     } catch (e) { console.warn('[mpwc] claim insert failed:', e); }
 
-    if (method === 'paypal') {
-      const url = 'https://www.paypal.com/paypalme/' + PAYPAL_USERNAME.replace('@','') + '/' + amount + 'USD';
-      window.open(url, '_blank');
-    } else {
-      // Venmo deep-link / web fallback
-      const encodedNote = encodeURIComponent(note);
-      const url = 'https://venmo.com/' + VENMO_USERNAME.replace('@','') + '?txn=pay&amount=' + amount + '&note=' + encodedNote;
-      window.open(url, '_blank');
-    }
+    // Venmo deep-link / web fallback (Venmo is the only payment method)
+    const encodedNote = encodeURIComponent(note);
+    const url = 'https://venmo.com/' + VENMO_USERNAME.replace('@','') + '?txn=pay&amount=' + amount + '&note=' + encodedNote;
+    window.open(url, '_blank');
 
     // Show confirmation in a SEPARATE overlay so the payment form stays intact
     // (a member can buy again later without reloading). Access is granted
     // manually by an admin after the Venmo payment clears.
     closePayment();
     document.getElementById('pc-msg').innerHTML =
-      'Thanks' + (name ? ', ' + name : '') + '! Complete your payment in the ' +
-      (method === 'paypal' ? 'PayPal' : 'Venmo') + ' window that just opened.<br><br>' +
+      'Thanks' + (name ? ', ' + name : '') + '! Complete your payment in the Venmo window that just opened.<br><br>' +
       "Once we confirm your payment we'll unlock your content (usually within a few hours). " +
       'You\'ll see it the next time you sign in to <strong>' + email + '</strong>.';
     document.getElementById('payment-confirm').style.display = 'flex';
@@ -2223,7 +2256,6 @@ window.mpwcIsAdmin = function() {
       <div class="footer-col-title">Company</div>
       <ul class="footer-links">
         <li><a href="#about">About Caroline</a></li>
-        <li><a href="#">Blog</a></li>
         <li><a href="#" onclick="event.preventDefault();openContactModal();">Contact</a></li>
         <li style="margin-top:0.9rem;"><a href="#" onclick="event.preventDefault();openMyDashboard();" style="display:inline-block; padding:0.6rem 1.15rem; background:var(--cream); color:var(--navy)!important; border-radius:3px; font-weight:600; letter-spacing:0.08em; text-transform:uppercase; font-size:0.72rem; white-space:nowrap;" onmouseover="this.style.background='#fff';" onmouseout="this.style.background='var(--cream)';">Member Dashboard →</a></li>
       </ul>
@@ -2238,7 +2270,7 @@ window.mpwcIsAdmin = function() {
     </div>
   </div>
   <div class="footer-bottom">
-    <span>© 2025 MatPilatesWithCaroline. All rights reserved.</span>
+    <span>© <span id="footer-year">2026</span> MatPilatesWithCaroline. All rights reserved.</span>
     <span>Privacy Policy · Terms of Use</span>
   </div>
 </footer>
@@ -2417,7 +2449,7 @@ window.mpwcIsAdmin = function() {
   <div style="max-width:980px; margin:0 auto; background:var(--white); min-height:100vh; box-shadow:0 0 0 1px var(--beige); font-family:'Jost',sans-serif;">
 
     <!-- Portal chrome -->
-    <div style="position:sticky; top:0; z-index:20; background:#0F1A2B; color:var(--cream); padding:0.65rem 1.5rem; display:flex; align-items:center; justify-content:space-between; gap:1rem; font-size:0.72rem; letter-spacing:0.04em; border-bottom:1px solid rgba(168,189,214,0.15);">
+    <div style="position:sticky; top:0; z-index:20; background:#0F1A2B; color:var(--cream); padding:0.65rem 1.5rem; display:flex; align-items:center; justify-content:space-between; gap:0.75rem 1rem; flex-wrap:wrap; font-size:0.72rem; letter-spacing:0.04em; border-bottom:1px solid rgba(168,189,214,0.15);">
       <div style="display:flex; align-items:center; gap:0.5rem;">
         <span onclick="closeCoachingPortal()" title="Back to home" style="display:flex; align-items:center; gap:0.5rem; cursor:pointer;">
           <span style="width:6px; height:6px; border-radius:50%; background:#7BC495; box-shadow:0 0 8px rgba(123,196,149,0.7); display:inline-block;"></span>
@@ -2425,7 +2457,7 @@ window.mpwcIsAdmin = function() {
         </span>
         <span style="font-size:0.58rem; letter-spacing:0.18em; text-transform:uppercase; color:var(--blue-light); padding:0.18rem 0.5rem; border:1px solid rgba(168,189,214,0.3); border-radius:2px; margin-left:0.5rem;">1:1 Coaching</span>
       </div>
-      <div style="display:flex; align-items:center; gap:1rem;">
+      <div style="display:flex; align-items:center; gap:1rem; flex-wrap:wrap;">
         <span id="cp-member-email" style="font-size:0.72rem; color:rgba(248,244,237,0.7);"></span>
         <button onclick="closeCoachingPortal()" style="background:var(--cream); border:1px solid var(--cream); border-radius:3px; padding:0.5rem 1rem; color:var(--navy); font-family:'Jost',sans-serif; font-size:0.68rem; font-weight:600; letter-spacing:0.12em; text-transform:uppercase; cursor:pointer; transition:all 0.2s;" onmouseover="this.style.background='var(--blue-light)';this.style.borderColor='var(--blue-light)';" onmouseout="this.style.background='var(--cream)';this.style.borderColor='var(--cream)';">← Back</button>
       </div>
@@ -2447,7 +2479,7 @@ window.mpwcIsAdmin = function() {
         <span style="display:block; width:20px; height:1px; background:var(--navy-mid);"></span>
         How it works
       </div>
-      <div style="display:grid; grid-template-columns:repeat(4, 1fr); gap:1rem;">
+      <div id="cp-steps" style="display:grid; grid-template-columns:repeat(4, 1fr); gap:1rem;">
         <div style="background:var(--off-white); padding:1.5rem 1.25rem; border:1px solid var(--beige); border-radius:4px;">
           <div style="font-family:'Cormorant Garamond',serif; font-size:1.75rem; font-weight:300; color:var(--navy); line-height:1;">01</div>
           <div style="font-size:0.62rem; letter-spacing:0.14em; text-transform:uppercase; color:var(--text-muted); margin:0.55rem 0 0.35rem;">Discovery</div>
@@ -2477,7 +2509,7 @@ window.mpwcIsAdmin = function() {
         <span style="display:block; width:20px; height:1px; background:var(--navy-mid);"></span>
         Pricing · pick what fits
       </div>
-      <div style="display:grid; grid-template-columns:repeat(3, 1fr); gap:1rem;">
+      <div id="cp-pricing" style="display:grid; grid-template-columns:repeat(3, 1fr); gap:1rem;">
 
         <!-- Discovery -->
         <div style="background:var(--white); border:1px solid var(--beige); border-radius:6px; padding:1.75rem 1.5rem; display:flex; flex-direction:column;">
@@ -2513,7 +2545,7 @@ window.mpwcIsAdmin = function() {
         </div>
 
         <!-- 12-Week Transformation -->
-        <div style="background:var(--navy); color:var(--cream); border-radius:6px; padding:1.75rem 1.5rem; display:flex; flex-direction:column; grid-column:span 2;">
+        <div id="cp-pricing-wide" style="background:var(--navy); color:var(--cream); border-radius:6px; padding:1.75rem 1.5rem; display:flex; flex-direction:column; grid-column:span 2;">
           <div style="font-size:0.62rem; letter-spacing:0.18em; text-transform:uppercase; color:var(--blue-light); margin-bottom:0.5rem;">12-Week Transformation</div>
           <div style="display:flex; align-items:flex-end; gap:2rem; flex-wrap:wrap;">
             <div style="font-family:'Cormorant Garamond',serif; font-size:2.5rem; font-weight:300; color:var(--cream); line-height:1;"><sup style="font-size:1rem; color:var(--blue-light);">$</sup>849<span style="font-size:0.9rem; color:rgba(248,244,237,0.6); margin-left:0.6rem;">paid in full</span></div>
@@ -2552,11 +2584,11 @@ window.mpwcIsAdmin = function() {
 
     <!-- Portal chrome -->
     <div style="position:sticky; top:0; z-index:20; background:#0F1A2B; color:var(--cream); padding:0.65rem 1.5rem; display:flex; align-items:center; justify-content:space-between; gap:0.75rem 1rem; flex-wrap:wrap; font-size:0.72rem; letter-spacing:0.04em; border-bottom:1px solid rgba(168,189,214,0.15);">
-      <div style="display:flex; align-items:center; gap:0.5rem;">
+      <span onclick="closeMemberDashboard()" title="Back to home" style="display:flex; align-items:center; gap:0.5rem; cursor:pointer;">
         <span style="width:6px; height:6px; border-radius:50%; background:#7BC495; box-shadow:0 0 8px rgba(123,196,149,0.7); display:inline-block;"></span>
         <span style="font-family:'Cormorant Garamond',serif; font-size:0.95rem;">MatPilates<span style="font-style:italic; color:var(--blue-light);">WithCaroline</span></span>
         <span style="font-size:0.58rem; letter-spacing:0.18em; text-transform:uppercase; color:var(--blue-light); padding:0.18rem 0.5rem; border:1px solid rgba(168,189,214,0.3); border-radius:2px; margin-left:0.5rem;">Dashboard</span>
-      </div>
+      </span>
       <div style="display:flex; align-items:center; gap:0.6rem; flex-wrap:wrap;">
         <button onclick="closeMemberDashboard();openMemberLibrary();" style="background:transparent; border:1px solid rgba(168,189,214,0.3); border-radius:2px; padding:0.4rem 0.75rem; color:var(--blue-light); font-family:'Jost',sans-serif; font-size:0.65rem; letter-spacing:0.12em; text-transform:uppercase; cursor:pointer; transition:all 0.2s;" onmouseover="this.style.background='rgba(168,189,214,0.12)';this.style.color='var(--cream)';" onmouseout="this.style.background='transparent';this.style.color='var(--blue-light)';">Library</button>
         <span id="md-member-email" style="font-size:0.72rem; color:rgba(248,244,237,0.7);"></span>
@@ -2567,7 +2599,7 @@ window.mpwcIsAdmin = function() {
     </div>
 
     <!-- Hero: greeting + big progress ring -->
-    <div style="display:grid; grid-template-columns:1fr auto; gap:2rem; padding:3rem 2.5rem 2.5rem; background:linear-gradient(135deg,#EDE5D6 0%,#D9CDB8 100%); align-items:center;">
+    <div class="md-hero" style="display:grid; grid-template-columns:1fr auto; gap:2rem; padding:3rem 2.5rem 2.5rem; background:linear-gradient(135deg,#EDE5D6 0%,#D9CDB8 100%); align-items:center;">
       <div>
         <div style="font-size:0.7rem; letter-spacing:0.2em; text-transform:uppercase; color:var(--navy-mid); margin-bottom:0.85rem; display:flex; align-items:center; gap:0.6rem;">
           <span style="display:block; width:24px; height:1px; background:var(--navy-mid);"></span>
@@ -2689,13 +2721,13 @@ window.mpwcIsAdmin = function() {
   <div style="max-width:980px; margin:0 auto; background:var(--white); min-height:100vh; box-shadow:0 0 0 1px var(--beige); font-family:'Jost',sans-serif;">
 
     <!-- Portal chrome -->
-    <div style="position:sticky; top:0; z-index:20; background:#0F1A2B; color:var(--cream); padding:0.65rem 1.5rem; display:flex; align-items:center; justify-content:space-between; gap:1rem; font-size:0.72rem; letter-spacing:0.04em; border-bottom:1px solid rgba(168,189,214,0.15);">
-      <div style="display:flex; align-items:center; gap:0.5rem;">
+    <div style="position:sticky; top:0; z-index:20; background:#0F1A2B; color:var(--cream); padding:0.65rem 1.5rem; display:flex; align-items:center; justify-content:space-between; gap:0.75rem 1rem; flex-wrap:wrap; font-size:0.72rem; letter-spacing:0.04em; border-bottom:1px solid rgba(168,189,214,0.15);">
+      <span onclick="closeMemberLibrary()" title="Back to home" style="display:flex; align-items:center; gap:0.5rem; cursor:pointer;">
         <span style="width:6px; height:6px; border-radius:50%; background:#7BC495; box-shadow:0 0 8px rgba(123,196,149,0.7); display:inline-block;"></span>
         <span style="font-family:'Cormorant Garamond',serif; font-size:0.95rem;">MatPilates<span style="font-style:italic; color:var(--blue-light);">WithCaroline</span></span>
         <span style="font-size:0.58rem; letter-spacing:0.18em; text-transform:uppercase; color:var(--blue-light); padding:0.18rem 0.5rem; border:1px solid rgba(168,189,214,0.3); border-radius:2px; margin-left:0.5rem;">Member Library</span>
-      </div>
-      <div style="display:flex; align-items:center; gap:1rem;">
+      </span>
+      <div style="display:flex; align-items:center; gap:1rem; flex-wrap:wrap;">
         <button onclick="closeMemberLibrary();openMemberDashboard();" style="background:transparent; border:1px solid rgba(168,189,214,0.3); border-radius:2px; padding:0.4rem 0.75rem; color:var(--blue-light); font-family:'Jost',sans-serif; font-size:0.65rem; letter-spacing:0.12em; text-transform:uppercase; cursor:pointer; transition:all 0.2s;" onmouseover="this.style.background='rgba(168,189,214,0.12)';this.style.color='var(--cream)';" onmouseout="this.style.background='transparent';this.style.color='var(--blue-light)';">Dashboard</button>
         <span id="ml-member-email" style="font-size:0.72rem; color:rgba(248,244,237,0.7);"></span>
         <button onclick="closeMemberLibrary()" style="background:transparent; border:1px solid rgba(168,189,214,0.3); border-radius:2px; padding:0.4rem 0.75rem; color:var(--blue-light); font-family:'Jost',sans-serif; font-size:0.65rem; letter-spacing:0.12em; text-transform:uppercase; cursor:pointer; transition:all 0.2s;" onmouseover="this.style.background='rgba(168,189,214,0.12)';this.style.color='var(--cream)';" onmouseout="this.style.background='transparent';this.style.color='var(--blue-light)';">← Exit</button>
@@ -2755,15 +2787,15 @@ window.mpwcIsAdmin = function() {
   <div id="workout-modal-inner" style="background:var(--white); border-radius:0; max-width:980px; width:100%; margin:0 auto; min-height:100vh; position:relative; box-shadow:0 0 0 1px var(--beige); font-family:'Jost',sans-serif;">
 
     <!-- Member portal chrome (sits above the workout header) -->
-    <div id="wm-portal-bar" style="position:sticky; top:0; z-index:20; background:#0F1A2B; color:var(--cream); padding:0.65rem 1.5rem; display:flex; align-items:center; justify-content:space-between; gap:1rem; font-size:0.72rem; letter-spacing:0.04em; border-bottom:1px solid rgba(168,189,214,0.15);">
-      <div style="display:flex; align-items:center; gap:1.5rem;">
+    <div id="wm-portal-bar" style="position:sticky; top:0; z-index:20; background:#0F1A2B; color:var(--cream); padding:0.65rem 1.5rem; display:flex; align-items:center; justify-content:space-between; gap:0.75rem 1rem; flex-wrap:wrap; font-size:0.72rem; letter-spacing:0.04em; border-bottom:1px solid rgba(168,189,214,0.15);">
+      <div style="display:flex; align-items:center; gap:1.5rem; flex-wrap:wrap;">
         <div style="display:flex; align-items:center; gap:0.5rem;">
           <span style="width:6px; height:6px; border-radius:50%; background:#7BC495; box-shadow:0 0 8px rgba(123,196,149,0.7); display:inline-block;"></span>
           <span style="font-family:'Cormorant Garamond',serif; font-size:0.95rem; letter-spacing:0.02em;">MatPilates<span style="font-style:italic; color:var(--blue-light);">WithCaroline</span></span>
           <span style="font-size:0.6rem; letter-spacing:0.18em; text-transform:uppercase; color:var(--blue-light); padding:0.18rem 0.5rem; border:1px solid rgba(168,189,214,0.3); border-radius:2px; margin-left:0.4rem;">Member Portal</span>
         </div>
       </div>
-      <div style="display:flex; align-items:center; gap:1.25rem;">
+      <div style="display:flex; align-items:center; gap:1.25rem; flex-wrap:wrap;">
         <div id="wm-streak" style="display:flex; align-items:center; gap:0.4rem; color:rgba(248,244,237,0.85); font-size:0.7rem;">
           <span style="font-size:0.85rem; line-height:1;">🔥</span>
           <span><span id="wm-streak-num" style="color:var(--cream); font-weight:500;">3</span> day streak</span>
@@ -2788,7 +2820,7 @@ window.mpwcIsAdmin = function() {
         <div id="wm-day-title" style="font-family:'Cormorant Garamond',serif; font-size:1.8rem; font-weight:300; color:var(--cream); line-height:1.2;"></div>
         <div id="wm-meta" style="font-size:0.78rem; color:rgba(248,244,237,0.55); margin-top:0.35rem;"></div>
       </div>
-      <div style="display:flex; gap:0.6rem; flex-shrink:0; align-items:flex-start; padding-top:0.2rem;">
+      <div id="wm-header-actions" style="display:flex; gap:0.6rem; flex-shrink:0; flex-wrap:wrap; align-items:flex-start; padding-top:0.2rem;">
         <button id="wm-week-pdf-btn" onclick="printFullWeek()" title="Download full Week 1 PDF" style="display:none; background:rgba(168,189,214,0.22); border:1px solid rgba(168,189,214,0.45); border-radius:3px; padding:0.45rem 0.85rem; font-family:'Jost',sans-serif; font-size:0.7rem; font-weight:500; letter-spacing:0.1em; text-transform:uppercase; color:var(--blue-light); cursor:pointer; transition:background 0.2s;" onmouseover="this.style.background='rgba(168,189,214,0.38)';" onmouseout="this.style.background='rgba(168,189,214,0.22)';">📄 Full Week PDF</button>
         <button id="wm-pdf-btn" onclick="printWorkout()" title="Save this day as PDF" style="background:rgba(168,189,214,0.15); border:1px solid rgba(168,189,214,0.3); border-radius:3px; padding:0.45rem 0.85rem; font-family:'Jost',sans-serif; font-size:0.7rem; font-weight:500; letter-spacing:0.1em; text-transform:uppercase; color:var(--blue-light); cursor:pointer; transition:background 0.2s;" onmouseover="this.style.background='rgba(168,189,214,0.28)';" onmouseout="this.style.background='rgba(168,189,214,0.15)';">⬇ Save PDF</button>
         <button id="wm-complete-btn" onclick="markComplete()" style="background:rgba(123,196,149,0.18); border:1px solid rgba(123,196,149,0.4); border-radius:3px; padding:0.45rem 0.95rem; font-family:'Jost',sans-serif; font-size:0.7rem; font-weight:500; letter-spacing:0.12em; text-transform:uppercase; color:#A6E0B8; cursor:pointer; transition:all 0.2s; display:inline-flex; align-items:center; gap:0.4rem;" onmouseover="this.style.background='rgba(123,196,149,0.32)';" onmouseout="this.style.background='rgba(123,196,149,0.18)';">✓ Mark complete</button>
@@ -3787,7 +3819,11 @@ let _gatePendingDay = null;
 let _gatePendingPreview = false;
 
 function hasAccount() {
-  return !!(window.MPWC && window.MPWC.user);
+  // A persistent "this device has signed in before" signal, independent of the
+  // live session — lets a logged-out returning member be routed to LOGIN
+  // (not pushed into the signup gate / duplicate-signup trap).
+  if (window.MPWC && window.MPWC.user) return true;
+  try { return !!localStorage.getItem(MEMBER_KEY); } catch(e) { return false; }
 }
 function isSignedIn() {
   return !!(window.MPWC && window.MPWC.user);
@@ -3951,16 +3987,34 @@ async function submitMemberGate() {
   } catch (e) {}
 
   try {
-    const { error } = await window.sb.auth.signUp({
+    const { data, error } = await window.sb.auth.signUp({
       email, password: pw,
       options: { data: { firstName: first, lastName: last, dob: dob } }
     });
     if (error) {
       btn.disabled=false; btn.textContent='Create Account & Unlock';
-      if (/already registered|already exists/i.test(error.message)) { showGateMsg('error','That email already has an account. Try signing in.'); }
+      if (/already registered|already exists/i.test(error.message)) {
+        showGateMsg('error','That email already has an account — please sign in.');
+        document.getElementById('login-email') && (document.getElementById('login-email').value = email);
+        switchToLogin();
+      }
       else { showGateMsg('error', error.message || 'Could not create account.'); }
       return;
     }
+    // With email-confirm OFF, Supabase's anti-enumeration returns NO error for an
+    // already-registered email — instead session is null and identities is empty.
+    // Detect that and route to login (prefilled) instead of a broken signed-out state.
+    const obfuscatedDuplicate = !data.session
+      || (data.user && Array.isArray(data.user.identities) && data.user.identities.length === 0);
+    if (obfuscatedDuplicate) {
+      btn.disabled=false; btn.textContent='Create Account & Unlock';
+      showGateMsg('error','That email already has an account — please sign in.');
+      try { localStorage.setItem(MEMBER_KEY, email); } catch(e){}
+      document.getElementById('login-email') && (document.getElementById('login-email').value = email);
+      switchToLogin();
+      return;
+    }
+    try { localStorage.setItem(MEMBER_KEY, email); } catch(e){}
     await window.authReady; await mpwcLoadState();   // ensure session+state loaded (email-confirm is OFF)
     setMember(email);
     const d=_gatePendingDay, p=_gatePendingPreview, after=_afterAuthAction; _afterAuthAction=null;
@@ -4094,7 +4148,7 @@ function getPurchases() {
   return window.MPWC ? window.MPWC.ent : { bundle: null, weeks: [], alacarte: [], history: [] };
 }
 function savePurchases(){}
-// Access is granted manually by an admin after Venmo/PayPal payment clears.
+// Access is granted manually by an admin after the Venmo payment clears.
 function recordPurchase(){}
 
 // Is a given day number unlocked for the member? (Free Week 1 + bundle/week/alacarte)
@@ -4146,11 +4200,10 @@ function closeAdminPanel(){
 function _adminEsc(s){ return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 
 function _adminFmtEnt(row){
-  const parts = [];
-  if (row.bundle_count || row.has_bundle) parts.push('Bundle');
-  // The view exposes an aggregated entitlements summary; fall back gracefully.
-  if (row.entitlements) return _adminEsc(row.entitlements);
-  return parts.length ? parts.join(', ') : '—';
+  // The view exposes `entitlements` as an integer count of grants.
+  const n = Number(row.entitlements) || 0;
+  if (n <= 0) return '—';
+  return _adminEsc(n + (n === 1 ? ' grant' : ' grants'));
 }
 
 async function openAdminPanel(){
@@ -4268,8 +4321,9 @@ async function adminGrant(userId, kind, ref){
   if (!window.mpwcIsAdmin()) { alert('Admins only.'); return; }
   // Default revenue per kind (cents) — adjust manually in DB if needed.
   const amount = kind === 'bundle' ? 3000 : kind === 'week' ? 1300 : 300;
-  const { error } = await window.sb.from('mpwc_entitlements').insert({ user_id: userId, kind: kind, ref: ref, amount_cents: amount });
-  if (error){ alert('Grant failed: ' + error.message); return; }
+  const grantedBy = (window.MPWC.user && window.MPWC.user.email) || null;
+  const { error } = await window.sb.from('mpwc_entitlements').insert({ user_id: userId, kind: kind, ref: ref, amount_cents: amount, granted_by: grantedBy });
+  if (error && !/duplicate|already exists|23505/i.test(error.message)){ alert('Grant failed: ' + error.message); return; }
   await openAdminPanel();
 }
 
@@ -4313,8 +4367,9 @@ function closeAdminDayPicker(){ document.getElementById('admin-day-picker').styl
 async function adminDayPickerGrant(){
   if (!window.mpwcIsAdmin()) { alert('Admins only.'); return; }
   if (!_adpSelected.length){ alert('Pick at least one day.'); return; }
+  const grantedBy = (window.MPWC.user && window.MPWC.user.email) || null;
   for (const d of _adpSelected.slice().sort((a,b)=>a-b)){
-    const { error } = await window.sb.from('mpwc_entitlements').insert({ user_id:_adpUser, kind:'day', ref:d, amount_cents:300 });
+    const { error } = await window.sb.from('mpwc_entitlements').insert({ user_id:_adpUser, kind:'day', ref:d, amount_cents:300, granted_by: grantedBy });
     if (error && !/duplicate|already exists|23505/i.test(error.message)){ alert('Grant failed for day ' + d + ': ' + error.message); return; }
   }
   closeAdminDayPicker();
@@ -4335,12 +4390,13 @@ async function adminApproveClaim(id){
   if (!window.mpwcIsAdmin()) { alert('Admins only.'); return; }
   const { data: c, error: e1 } = await window.sb.from('mpwc_payment_claims').select('*').eq('id', id).single();
   if (e1 || !c){ alert('Could not load that request.'); return; }
+  const grantedBy = (window.MPWC.user && window.MPWC.user.email) || null;
   const inserts = [];
-  if (c.plan === 'bundle') inserts.push({ user_id:c.user_id, kind:'bundle', ref:null, amount_cents:c.amount_cents });
-  else if (c.plan === 'weekly') inserts.push({ user_id:c.user_id, kind:'week', ref:c.week, amount_cents:c.amount_cents });
+  if (c.plan === 'bundle') inserts.push({ user_id:c.user_id, kind:'bundle', ref:null, amount_cents:c.amount_cents, granted_by: grantedBy });
+  else if (c.plan === 'weekly') inserts.push({ user_id:c.user_id, kind:'week', ref:c.week, amount_cents:c.amount_cents, granted_by: grantedBy });
   else if (c.plan === 'alacarte' && Array.isArray(c.days)) {
     const per = Math.round((c.amount_cents || 0) / Math.max(c.days.length, 1));
-    c.days.forEach(d => inserts.push({ user_id:c.user_id, kind:'day', ref:d, amount_cents:per }));
+    c.days.forEach(d => inserts.push({ user_id:c.user_id, kind:'day', ref:d, amount_cents:per, granted_by: grantedBy }));
   }
   for (const ins of inserts){
     const { error } = await window.sb.from('mpwc_entitlements').insert(ins);
@@ -4420,7 +4476,8 @@ function openMyDashboard() {
 // ─────────────────────────────────────────────────────────────────
 function openMemberLogin() {
   const profile = getMemberProfile();
-  document.getElementById('login-email').value = profile.email || getMemberEmail() || '';
+  let knownEmail = ''; try { knownEmail = localStorage.getItem(MEMBER_KEY) || ''; } catch(e){}
+  document.getElementById('login-email').value = profile.email || getMemberEmail() || knownEmail || '';
   document.getElementById('login-password').value = '';
   document.getElementById('login-password').type = 'password';
   document.getElementById('login-pw-toggle').textContent = 'Show';
@@ -4484,6 +4541,7 @@ async function submitMemberLogin() {
   try {
     const { error } = await window.sb.auth.signInWithPassword({ email, password: pw });
     if (error){ btn.disabled=false; btn.textContent='Sign In'; showLoginMsg('error','Incorrect email or password.'); return; }
+    try { localStorage.setItem(MEMBER_KEY, email); } catch(e){}
     await mpwcLoadState(); setMember(email);
     btn.disabled=false; btn.textContent='Sign In'; closeMemberLogin();
     const after=_afterAuthAction; _afterAuthAction=null;
@@ -4495,6 +4553,51 @@ async function submitMemberLogin() {
 }
 
 async function forgotPassword(){ const email=(document.getElementById('login-email').value||'').trim().toLowerCase(); if(!email||!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)){ showLoginMsg('error','Enter your email above first, then tap reset.'); return;} const { error } = await window.sb.auth.resetPasswordForEmail(email, { redirectTo: window.location.origin }); showLoginMsg(error?'error':'success', error?error.message:'Password reset link sent — check your email.'); }
+
+// ─────────────────────────────────────────────────────────────────
+//  PASSWORD RESET — recovery-link flow (Supabase PASSWORD_RECOVERY)
+// ─────────────────────────────────────────────────────────────────
+function openPasswordReset(){
+  // Close any other auth surface so the user lands on a single, clear screen.
+  try { document.getElementById('member-login').style.display = 'none'; } catch(e){}
+  try { document.getElementById('member-gate').style.display = 'none'; } catch(e){}
+  document.getElementById('pr-password').value = '';
+  document.getElementById('pr-confirm').value = '';
+  document.getElementById('pr-msg').textContent = '';
+  document.getElementById('password-reset').style.display = 'flex';
+  document.body.style.overflow = 'hidden';
+  setTimeout(() => { try { document.getElementById('pr-password').focus(); } catch(e){} }, 100);
+}
+function showPrMsg(type, text){ const m=document.getElementById('pr-msg'); const colors={error:'#c0392b',info:'#2C4468',success:'#1a6b3a'}; m.style.color=colors[type]||'#2C4468'; m.textContent=text; }
+async function submitPasswordReset(){
+  const pw = document.getElementById('pr-password').value;
+  const confirm = document.getElementById('pr-confirm').value;
+  if (pw.length < 8){ showPrMsg('error','Use at least 8 characters.'); return; }
+  if (pw !== confirm){ showPrMsg('error','Passwords don\'t match.'); return; }
+  const btn = document.getElementById('pr-btn');
+  btn.disabled = true; btn.textContent = 'Updating…';
+  try {
+    const { error } = await window.sb.auth.updateUser({ password: pw });
+    if (error){ btn.disabled=false; btn.textContent='Update Password'; showPrMsg('error', error.message || 'Could not update password.'); return; }
+    showPrMsg('success','Password updated — taking you to your dashboard.');
+    await mpwcLoadState();
+    // Clear the recovery token from the URL so a refresh doesn't re-trigger.
+    try { history.replaceState({}, '', window.location.pathname + window.location.search); } catch(e){}
+    setTimeout(() => {
+      document.getElementById('password-reset').style.display = 'none';
+      document.body.style.overflow = '';
+      btn.disabled=false; btn.textContent='Update Password';
+      openMemberDashboard();
+    }, 800);
+  } catch(e){ btn.disabled=false; btn.textContent='Update Password'; showPrMsg('error','Network error. Try again.'); }
+}
+// On load, a recovery link arrives with type=recovery in the URL hash —
+// surface the reset modal even if the auth event fired before our listener.
+document.addEventListener('DOMContentLoaded', function(){
+  if (/[#&?]type=recovery(?:&|$)/.test(window.location.hash) || /[?&]type=recovery(?:&|$)/.test(window.location.search)) {
+    window.authReady.then(function(){ openPasswordReset(); }).catch(function(){ openPasswordReset(); });
+  }
+});
 
 // ─────────────────────────────────────────────────────────────────
 //  CONTACT MODAL — footer "Contact" link
@@ -4857,6 +4960,8 @@ function updatePortalProgress() {
   }
 }
 function markComplete() {
+  // Defense-in-depth: locked days can't be marked complete (UI already hides the button).
+  if (!isDayUnlocked(currentDay)) return;
   const done = getCompleted();
   const i = done.indexOf(currentDay);
   const adding = (i === -1);
@@ -4880,9 +4985,12 @@ document.getElementById('workout-modal').addEventListener('click', function(e) {
   if (e.target === this) closeWorkout();
 });
 
-// Esc to exit the member portal
+// Esc to exit the member portal — but if an exercise video demo is open,
+// Esc closes that first so the workout underneath isn't dismissed too early.
 document.addEventListener('keydown', function(e) {
-  if (e.key === 'Escape' && document.getElementById('workout-modal').style.display === 'flex') closeWorkout();
+  if (e.key !== 'Escape') return;
+  if (document.getElementById('video-demo-modal').style.display === 'flex') return;
+  if (document.getElementById('workout-modal').style.display === 'flex') closeWorkout();
 });
 
 // On load, restore portal progress + open from URL hash if present
@@ -5315,12 +5423,57 @@ function closeVideoDemo() {
   if (video) { video.pause(); video.removeAttribute('src'); video.load(); }
   if (img) { img.removeAttribute('src'); img.style.display = 'none'; }
   document.getElementById('video-demo-modal').style.display = 'none';
-  document.body.style.overflow = '';
+  // Keep scroll locked if the workout (or another full overlay) is still open underneath.
+  if (typeof _mpwcRestoreScrollIfNoOverlay === 'function') _mpwcRestoreScrollIfNoOverlay();
+  else document.body.style.overflow = '';
 }
 
 document.addEventListener('DOMContentLoaded', function() {
   var m = document.getElementById('video-demo-modal');
   if (m) m.addEventListener('click', function(e) { if (e.target === this) closeVideoDemo(); });
+  // Esc closes the exercise video demo first (it sits above the workout).
+  document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape' && document.getElementById('video-demo-modal').style.display === 'flex') closeVideoDemo();
+  });
+  // Keep the footer copyright year current so it never goes stale.
+  var yr = document.getElementById('footer-year');
+  if (yr) yr.textContent = new Date().getFullYear();
+
+  // Consolidated Esc-to-close for overlays without their own handler.
+  // Ordered topmost-first (by z-index) so Esc dismisses whatever is on top.
+  // Overlays with dedicated Esc handlers (member-gate, coaching-portal,
+  // contact-modal, member-login, workout-modal/video-demo) are intentionally omitted.
+  var ESC_OVERLAYS = [
+    ['admin-day-picker', closeAdminDayPicker],   // z-710
+    ['payment-confirm',  closePaymentConfirm],   // z-700
+    ['mpwc-admin',       closeAdminPanel],        // z-680
+    ['plan-chooser',     closePlanChooser],       // z-660
+    ['payment-modal',    closePayment],           // z-600 (modal)
+    ['member-dashboard', closeMemberDashboard],   // z-615
+    ['member-library',   closeMemberLibrary]      // z-610
+  ];
+  document.addEventListener('keydown', function(e) {
+    if (e.key !== 'Escape') return;
+    // Don't act if a higher-priority overlay with its own handler is open.
+    var guarded = ['video-demo-modal','workout-modal','member-gate','member-login','coaching-portal','contact-modal'];
+    for (var g = 0; g < guarded.length; g++) {
+      var ge = document.getElementById(guarded[g]);
+      if (ge && (ge.style.display === 'flex' || ge.style.display === 'block')) return;
+    }
+    for (var i = 0; i < ESC_OVERLAYS.length; i++) {
+      var el = document.getElementById(ESC_OVERLAYS[i][0]);
+      if (el && (el.style.display === 'flex' || el.style.display === 'block')) {
+        ESC_OVERLAYS[i][1]();
+        return;
+      }
+    }
+  });
+
+  // Backdrop-click-to-close for the two overlays that lacked it.
+  var pc = document.getElementById('plan-chooser');
+  if (pc) pc.addEventListener('click', function(e){ if (e.target === this) closePlanChooser(); });
+  var pcf = document.getElementById('payment-confirm');
+  if (pcf) pcf.addEventListener('click', function(e){ if (e.target === this) closePaymentConfirm(); });
 });
 </script>
 
@@ -5439,6 +5592,16 @@ document.addEventListener('DOMContentLoaded', function() {
   .footer-top { grid-template-columns: 1fr 1fr; gap: 2rem; }
   .schedule-header { flex-direction: column; align-items: flex-start; gap: 1rem; }
   #workout-modal > div { margin: 0; border-radius: 0; min-height: 100vh; }
+  /* Coaching portal grids collapse on mobile (column counts are set inline → !important) */
+  #cp-steps { grid-template-columns: 1fr 1fr !important; }
+  #cp-pricing { grid-template-columns: 1fr !important; }
+  #cp-pricing-wide { grid-column: span 1 !important; }
+  /* Workout sticky day header stacks so the 3 actions stay tappable */
+  #wm-header { flex-direction: column; align-items: stretch; }
+  #wm-header-actions { width: 100%; }
+  /* Dashboard hero: progress ring drops below the greeting */
+  .md-hero { grid-template-columns: 1fr !important; padding: 2rem 1.5rem !important; text-align: center; }
+  .md-hero > div:last-child { justify-self: center; }
   #thankyou-overlay > div { border-radius: 8px; margin: 1rem; }
   #thankyou-overlay > div > div:last-child { padding: 1.5rem; }
   #thankyou-overlay > div > div:last-child > div:nth-child(3) { grid-template-columns: 1fr; }
