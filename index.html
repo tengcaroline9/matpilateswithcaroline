@@ -2551,13 +2551,13 @@ window.mpwcIsAdmin = function() {
   <div style="max-width:980px; margin:0 auto; background:var(--white); min-height:100vh; box-shadow:0 0 0 1px var(--beige); font-family:'Jost',sans-serif;">
 
     <!-- Portal chrome -->
-    <div style="position:sticky; top:0; z-index:20; background:#0F1A2B; color:var(--cream); padding:0.65rem 1.5rem; display:flex; align-items:center; justify-content:space-between; gap:1rem; font-size:0.72rem; letter-spacing:0.04em; border-bottom:1px solid rgba(168,189,214,0.15);">
+    <div style="position:sticky; top:0; z-index:20; background:#0F1A2B; color:var(--cream); padding:0.65rem 1.5rem; display:flex; align-items:center; justify-content:space-between; gap:0.75rem 1rem; flex-wrap:wrap; font-size:0.72rem; letter-spacing:0.04em; border-bottom:1px solid rgba(168,189,214,0.15);">
       <div style="display:flex; align-items:center; gap:0.5rem;">
         <span style="width:6px; height:6px; border-radius:50%; background:#7BC495; box-shadow:0 0 8px rgba(123,196,149,0.7); display:inline-block;"></span>
         <span style="font-family:'Cormorant Garamond',serif; font-size:0.95rem;">MatPilates<span style="font-style:italic; color:var(--blue-light);">WithCaroline</span></span>
         <span style="font-size:0.58rem; letter-spacing:0.18em; text-transform:uppercase; color:var(--blue-light); padding:0.18rem 0.5rem; border:1px solid rgba(168,189,214,0.3); border-radius:2px; margin-left:0.5rem;">Dashboard</span>
       </div>
-      <div style="display:flex; align-items:center; gap:1rem;">
+      <div style="display:flex; align-items:center; gap:0.6rem; flex-wrap:wrap;">
         <button onclick="closeMemberDashboard();openMemberLibrary();" style="background:transparent; border:1px solid rgba(168,189,214,0.3); border-radius:2px; padding:0.4rem 0.75rem; color:var(--blue-light); font-family:'Jost',sans-serif; font-size:0.65rem; letter-spacing:0.12em; text-transform:uppercase; cursor:pointer; transition:all 0.2s;" onmouseover="this.style.background='rgba(168,189,214,0.12)';this.style.color='var(--cream)';" onmouseout="this.style.background='transparent';this.style.color='var(--blue-light)';">Library</button>
         <span id="md-member-email" style="font-size:0.72rem; color:rgba(248,244,237,0.7);"></span>
         <button id="md-admin-btn" onclick="openAdminPanel()" title="Admin panel" style="display:none; background:transparent; border:1px solid rgba(168,189,214,0.3); border-radius:2px; padding:0.4rem 0.75rem; color:var(--blue-light); font-family:'Jost',sans-serif; font-size:0.65rem; letter-spacing:0.12em; text-transform:uppercase; cursor:pointer; transition:all 0.2s;" onmouseover="this.style.background='rgba(168,189,214,0.12)';this.style.color='var(--cream)';" onmouseout="this.style.background='transparent';this.style.color='var(--blue-light)';">Admin</button>
@@ -2575,6 +2575,7 @@ window.mpwcIsAdmin = function() {
         </div>
         <h1 id="md-greeting" style="font-family:'Cormorant Garamond',serif; font-size:clamp(2.2rem, 4.5vw, 3.4rem); font-weight:300; color:var(--navy); line-height:1.1; letter-spacing:-0.01em; margin-bottom:0.85rem;">Welcome back.</h1>
         <p id="md-subline" style="font-size:1rem; color:var(--text-mid); line-height:1.8; max-width:480px;">Here's the state of your 30-day journey — what's complete, what's next, and what you've unlocked.</p>
+        <button id="md-admin-banner" onclick="openAdminPanel()" style="display:none; align-items:center; gap:0.5rem; margin-top:1.5rem; background:var(--navy); color:var(--cream); border:none; border-radius:4px; padding:0.85rem 1.5rem; font-family:'Jost',sans-serif; font-size:0.72rem; font-weight:600; letter-spacing:0.12em; text-transform:uppercase; cursor:pointer; transition:background 0.2s;" onmouseover="this.style.background='var(--navy-mid)';" onmouseout="this.style.background='var(--navy)';">⚙ Open Admin Panel →</button>
 
         <!-- Quick stats -->
         <div style="display:flex; gap:2.25rem; margin-top:1.75rem;">
@@ -4710,9 +4711,13 @@ function openMemberDashboard() {
     list.appendChild(row);
   });
 
-  // Admin entry point — only visible to admins.
+  // Admin entry points — only visible to admins (header button + body banner
+  // so it's reachable on mobile where the header buttons can overflow).
+  const _isAdmin = (typeof window.mpwcIsAdmin === 'function' && window.mpwcIsAdmin());
   const adminBtn = document.getElementById('md-admin-btn');
-  if (adminBtn) adminBtn.style.display = (typeof window.mpwcIsAdmin === 'function' && window.mpwcIsAdmin()) ? '' : 'none';
+  if (adminBtn) adminBtn.style.display = _isAdmin ? '' : 'none';
+  const adminBanner = document.getElementById('md-admin-banner');
+  if (adminBanner) adminBanner.style.display = _isAdmin ? 'inline-flex' : 'none';
 
   const dash = document.getElementById('member-dashboard');
   dash.style.display = 'block';
