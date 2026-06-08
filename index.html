@@ -2691,7 +2691,8 @@ window.mpwcIsAdmin = function() {
     </div>
   </div>
   <div style="padding:1.75rem 2rem; max-width:1100px; margin:0 auto;">
-    <div id="admin-summary" style="display:flex; gap:1rem; flex-wrap:wrap; margin-bottom:1.5rem;"></div>
+    <div id="admin-summary" style="display:grid; grid-template-columns:repeat(auto-fit, minmax(165px, 1fr)); gap:1rem; margin-bottom:1.5rem;"></div>
+    <div id="admin-analytics" style="margin-bottom:2rem;"></div>
     <div id="admin-claims" style="margin-bottom:2rem;"></div>
     <div id="admin-body" style="background:var(--white); border:1px solid var(--beige); border-radius:6px; overflow-x:auto;"></div>
   </div>
@@ -4206,6 +4207,217 @@ function _adminFmtEnt(row){
   return _adminEsc(n + (n === 1 ? ' grant' : ' grants'));
 }
 
+// Accent used across analytics (matches the pending-claims gold nudge).
+const ANALYTICS_ACCENT = '#c0813a';
+
+function _anMoney(cents){ return '$' + Math.round((cents || 0) / 100); }            // whole dollars
+function _anMoney2(cents){ return '$' + ((cents || 0) / 100).toFixed(2); }          // 2-decimal
+function _anPct(num, den){ return (!den || den <= 0) ? '—' : (Math.round((num / den) * 100) + '%'); }
+function _anMedian(arr){
+  if (!arr.length) return null;
+  const s = arr.slice().sort((a, b) => a - b);
+  const mid = Math.floor(s.length / 2);
+  return (s.length % 2) ? s[mid] : (s[mid - 1] + s[mid]) / 2;
+}
+
+// Admin/staff accounts — excluded from every analytics metric (they aren't customers).
+const ANALYTICS_ADMIN_EMAILS = new Set(['andresescobedolara@gmail.com', 'tengcaroline9@gmail.com']);
+
+// Read-only retention/conversion analytics. Renders into #admin-summary (funnel
+// cards, replacing the old 3) + #admin-analytics (engagement/curve/products).
+// Never throws — on failure it shows a small notice and lets the rest of the
+// admin panel load normally.
+async function mpwcRenderAnalytics(rows){
+  const summary = document.getElementById('admin-summary');
+  const box = document.getElementById('admin-analytics');
+  try {
+    // Drop admin/staff accounts up front — this cascades to every metric below,
+    // since the progress/entitlement loops skip any user not in the filtered set.
+    const adminIds = new Set(rows.filter(r => ANALYTICS_ADMIN_EMAILS.has(String(r.email || '').toLowerCase())).map(r => r.id));
+    rows = rows.filter(r => !adminIds.has(r.id));
+    const N = rows.length;
+
+    // ── Reads (all admin-RLS-gated) ──
+    const [progRes, entRes, claimRes] = await Promise.all([
+      window.sb.from('mpwc_progress').select('user_id,day,completed_at'),
+      window.sb.from('mpwc_entitlements').select('user_id,kind,ref,amount_cents,created_at').gt('amount_cents', 0),
+      window.sb.from('mpwc_payment_claims').select('user_id').eq('status', 'pending')
+    ]);
+    if (progRes.error) throw progRes.error;
+    if (entRes.error) throw entRes.error;
+    if (claimRes.error) console.warn('pending claims read failed:', claimRes.error.message);
+    const progress = progRes.data || [];
+    const paidEnts = entRes.data || [];
+    // Exclude admin-owned pending claims from the count too.
+    const pendingClaims = (claimRes.data || []).filter(c => !adminIds.has(c.user_id)).length;
+
+    // Overview lookup (defensive joins skip rows whose user isn't in overview).
+    const ovById = {}; rows.forEach(r => { ovById[r.id] = r; });
+
+    // ── Top-line funnel ──
+    const activated = rows.filter(r => (r.days_completed || 0) > 0).length;
+    const paidCustomers = rows.filter(r => (r.revenue_cents || 0) > 0).length;
+    const revenueCents = rows.reduce((s, r) => s + (r.revenue_cents || 0), 0);
+    const arpu = N > 0 ? _anMoney2(revenueCents / N) : '—';
+    const arppu = paidCustomers > 0 ? _anMoney2(revenueCents / paidCustomers) : '—';
+
+    // ── Distinct users per day (drop-off curve + completion milestones) ──
+    const usersByDay = {};                       // day -> Set(user_id)
+    for (const p of progress) {
+      if (!ovById[p.user_id]) continue;          // skip orphan progress rows
+      const d = Number(p.day);
+      if (!d) continue;
+      (usersByDay[d] || (usersByDay[d] = new Set())).add(p.user_id);
+    }
+    const dayCount = d => (usersByDay[d] ? usersByDay[d].size : 0);
+    const day7 = dayCount(7);
+    const day30 = dayCount(30);
+    let maxCount = 0;
+    for (let d = 1; d <= 30; d++) maxCount = Math.max(maxCount, dayCount(d));
+
+    // ── Per-payer first-paid time & buy-again count ──
+    const firstPaidByUser = {};                  // user_id -> earliest paid created_at (ms)
+    const paidEntCountByUser = {};               // user_id -> # paid entitlements
+    const productAgg = { day: { n: 0, cents: 0 }, week: { n: 0, cents: 0 }, bundle: { n: 0, cents: 0 } };
+    for (const e of paidEnts) {
+      if (!ovById[e.user_id]) continue;          // skip orphan entitlement rows
+      paidEntCountByUser[e.user_id] = (paidEntCountByUser[e.user_id] || 0) + 1;
+      const t = e.created_at ? Date.parse(e.created_at) : NaN;
+      if (!isNaN(t) && (firstPaidByUser[e.user_id] === undefined || t < firstPaidByUser[e.user_id])) {
+        firstPaidByUser[e.user_id] = t;
+      }
+      if (productAgg[e.kind]) { productAgg[e.kind].n++; productAgg[e.kind].cents += (e.amount_cents || 0); }
+    }
+
+    // Time-to-purchase (median days), among users who actually have paid ents.
+    const diffs = [];
+    for (const uid in firstPaidByUser) {
+      const ov = ovById[uid];
+      const signup = ov && ov.created_at ? Date.parse(ov.created_at) : NaN;
+      if (isNaN(signup)) continue;
+      diffs.push((firstPaidByUser[uid] - signup) / 86400000);
+    }
+    const medianTTP = _anMedian(diffs);
+
+    // Repeat / upsell buyers (≥2 paid entitlements).
+    const repeatBuyers = Object.values(paidEntCountByUser).filter(n => n >= 2).length;
+
+    // ── Render: funnel cards ──
+    const cardStyle = 'background:var(--white); border:1px solid var(--beige); border-radius:6px; padding:1rem 1.25rem;';
+    const bigNum = "font-family:'Cormorant Garamond',serif; font-size:1.8rem; font-weight:300; color:var(--navy); line-height:1;";
+    const label = 'font-size:0.66rem; letter-spacing:0.12em; text-transform:uppercase; color:var(--text-muted); margin-top:0.4rem;';
+    const sub = 'font-size:0.68rem; color:var(--text-muted); margin-top:0.35rem; line-height:1.3;';
+
+    summary.innerHTML = `
+      <div style="${cardStyle}">
+        <div style="${bigNum}">${N}</div>
+        <div style="${label}">Free-week signups</div>
+        <div style="${sub}">gave email for the free week</div>
+      </div>
+      <div style="${cardStyle}">
+        <div style="${bigNum}">${activated} <span style="font-size:0.95rem; color:var(--text-mid);">(${_anPct(activated, N)} of signups)</span></div>
+        <div style="${label}">Activated</div>
+        <div style="${sub}">did ≥1 workout</div>
+      </div>
+      <div style="${cardStyle}">
+        <div style="${bigNum}">${paidCustomers} <span style="font-size:1.05rem; color:${ANALYTICS_ACCENT};">${_anPct(paidCustomers, N)}</span></div>
+        <div style="${label}">Paid customers · conversion</div>
+        <div style="${sub}">free → paid</div>
+      </div>
+      <div style="${cardStyle}">
+        <div style="${bigNum}">${_anMoney(revenueCents)}</div>
+        <div style="${label}">Revenue</div>
+        <div style="${sub}">ARPU ${arpu} · ARPPU ${arppu}</div>
+      </div>
+      <div style="${cardStyle}">
+        <div style="${bigNum}${pendingClaims > 0 ? '; color:' + ANALYTICS_ACCENT : ''}">${pendingClaims}</div>
+        <div style="${label}">Pending claims</div>
+        <div style="${sub}">awaiting your approval</div>
+      </div>`;
+
+    // ── Render: engagement / retention ──
+    const sectionTitle = 'font-size:0.66rem; letter-spacing:0.14em; text-transform:uppercase; color:var(--navy-mid); margin:0 0 1rem; display:flex; align-items:center; gap:0.6rem;';
+    const titleBar = '<span style="display:block; width:20px; height:1px; background:var(--navy-mid);"></span>';
+
+    // Two-up milestone tiles.
+    const milestones = `
+      <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(220px, 1fr)); gap:1rem; margin-bottom:1.5rem;">
+        <div style="${cardStyle}">
+          <div style="${bigNum}">${_anPct(day7, N)}</div>
+          <div style="${label}">Finished the free week (reached day 7)</div>
+          <div style="${sub}">${day7} of ${N} signups</div>
+        </div>
+        <div style="${cardStyle}">
+          <div style="${bigNum}">${day30} <span style="font-size:1.05rem; color:var(--text-mid);">(${_anPct(day30, paidCustomers)})</span></div>
+          <div style="${label}">Finished all 30 days</div>
+          <div style="${sub}">% of paid customers</div>
+        </div>
+        <div style="${cardStyle}">
+          <div style="${bigNum}">${medianTTP == null ? '—' : medianTTP.toFixed(1)}</div>
+          <div style="${label}">Median days from signup to first purchase</div>
+          <div style="${sub}">among paid customers</div>
+        </div>
+        <div style="${cardStyle}">
+          <div style="${bigNum}">${repeatBuyers} <span style="font-size:1.05rem; color:var(--text-mid);">(${_anPct(repeatBuyers, paidCustomers)})</span></div>
+          <div style="${label}">Came back to buy again</div>
+          <div style="${sub}">% of paid customers</div>
+        </div>
+      </div>`;
+
+    // Drop-off curve — 30 plain-CSS bars.
+    let bars = '';
+    for (let d = 1; d <= 30; d++) {
+      const c = dayCount(d);
+      const w = maxCount > 0 ? (c / maxCount * 100) : 0;
+      bars += `
+        <div style="display:flex; align-items:center; gap:0.6rem; margin-bottom:0.2rem;">
+          <span style="flex:0 0 42px; font-size:0.62rem; letter-spacing:0.04em; color:var(--text-muted); text-align:right;">Day ${d}</span>
+          <div style="flex:1; height:11px; background:var(--cream); border-radius:2px; overflow:hidden;">
+            <div style="height:100%; width:${w}%; background:${ANALYTICS_ACCENT}; border-radius:2px;"></div>
+          </div>
+          <span style="flex:0 0 28px; font-size:0.66rem; color:var(--text-mid); text-align:right;">${c}</span>
+        </div>`;
+    }
+    const curve = `
+      <div style="${cardStyle}; margin-bottom:1.5rem;">
+        <div style="font-size:0.66rem; letter-spacing:0.12em; text-transform:uppercase; color:var(--text-muted); margin-bottom:0.85rem;">Progression drop-off — distinct users reaching each day</div>
+        ${bars}
+      </div>`;
+
+    // Revenue by product.
+    const prodRow = (name, agg) => `
+      <tr>
+        <td style="padding:0.6rem 0.85rem; font-size:0.82rem; color:var(--text-dark); border-bottom:1px solid var(--beige);">${name}</td>
+        <td style="padding:0.6rem 0.85rem; font-size:0.82rem; color:var(--text-mid); border-bottom:1px solid var(--beige); text-align:center;">${agg.n}</td>
+        <td style="padding:0.6rem 0.85rem; font-size:0.82rem; color:var(--navy); border-bottom:1px solid var(--beige); text-align:right;">${_anMoney(agg.cents)}</td>
+      </tr>`;
+    const products = `
+      <div style="${cardStyle}">
+        <div style="font-size:0.66rem; letter-spacing:0.12em; text-transform:uppercase; color:var(--text-muted); margin-bottom:0.6rem;">Revenue by product</div>
+        <table style="width:100%; border-collapse:collapse;">
+          <thead><tr>
+            <th style="padding:0.4rem 0.85rem; font-size:0.58rem; letter-spacing:0.1em; text-transform:uppercase; color:var(--text-muted); text-align:left; border-bottom:1px solid var(--beige);">Product</th>
+            <th style="padding:0.4rem 0.85rem; font-size:0.58rem; letter-spacing:0.1em; text-transform:uppercase; color:var(--text-muted); text-align:center; border-bottom:1px solid var(--beige);">Purchases</th>
+            <th style="padding:0.4rem 0.85rem; font-size:0.58rem; letter-spacing:0.1em; text-transform:uppercase; color:var(--text-muted); text-align:right; border-bottom:1px solid var(--beige);">Revenue</th>
+          </tr></thead>
+          <tbody>
+            ${prodRow('À la carte (day)', productAgg.day)}
+            ${prodRow('Weekly', productAgg.week)}
+            ${prodRow('Bundle', productAgg.bundle)}
+          </tbody>
+        </table>
+      </div>`;
+
+    box.innerHTML = `
+      <div style="${sectionTitle}">${titleBar} Engagement &amp; retention</div>
+      ${milestones}
+      ${curve}
+      ${products}`;
+  } catch (err) {
+    box.innerHTML = '<div style="font-size:0.78rem; color:#c0392b; padding:0.5rem 0;">Couldn’t load analytics.</div>';
+  }
+}
+
 async function openAdminPanel(){
   if (!window.MPWC.user){ openMemberLogin(); return; }
   if (!window.mpwcIsAdmin()){ alert('Admins only.'); return; }
@@ -4226,19 +4438,8 @@ async function openAdminPanel(){
   }
   const rows = data || [];
 
-  // Summary cards
-  const totalRevenue = rows.reduce((s, r) => s + (r.revenue_cents || 0), 0) / 100;
-  const summary = document.getElementById('admin-summary');
-  const cards = [
-    ['Members', rows.length],
-    ['Revenue', '$' + totalRevenue.toFixed(2)],
-    ['Days completed', rows.reduce((s, r) => s + (r.days_completed || 0), 0)]
-  ];
-  summary.innerHTML = cards.map(([l, v]) => `
-    <div style="flex:1; min-width:140px; background:var(--white); border:1px solid var(--beige); border-radius:6px; padding:1rem 1.25rem;">
-      <div style="font-family:'Cormorant Garamond',serif; font-size:1.8rem; font-weight:300; color:var(--navy); line-height:1;">${_adminEsc(v)}</div>
-      <div style="font-size:0.66rem; letter-spacing:0.12em; text-transform:uppercase; color:var(--text-muted); margin-top:0.35rem;">${_adminEsc(l)}</div>
-    </div>`).join('');
+  // ── Funnel cards + engagement/retention analytics (read-only) ──
+  await mpwcRenderAnalytics(rows);
 
   // ── Pending payment requests (what each client selected at pay-click) ──
   const emailById = {}; rows.forEach(r => { emailById[r.id] = r.email; });
